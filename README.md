@@ -45,8 +45,9 @@ The sequence of the programs is:
    + XtX file created in step 2
    + phenotype file in txt format without header in the same order as the genotype matrix
    + list in txt format with line number of individual with missing phenotype (according to line in genotype file) - these individuals will be removed from the analysis
-4. Plotting
-5. Predicting
+4. **plot_all_traits_1group.py**
+   Plotting variances, covariances, correlations and sigma2 for several traits (only 1 group) 
+6. Predicting
 
 Common input parameters are:
 ```
