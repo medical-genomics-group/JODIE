@@ -479,9 +479,9 @@ def main(n, p, k, groups, gindex, iters, burnin, xfiles, xtxfiles, yfile, itc, r
         logger.info(f"{mean_sigma2=}")
         ### save
         dfm = pd.DataFrame(mean_beta, columns=['child', 'mother', 'father', 'poo'])
-        dfm.to_csv(resultdir+'/mean_beta_'+str(it)+'.csv.zip', index=False, compression='zip', sep=',')
+        dfm.to_csv(resultdir+'/mean_beta.csv.zip', index=False, compression='zip', sep=',')
         dfv = pd.DataFrame(var_beta, columns=['child', 'mother', 'father', 'poo'])
-        dfv.to_csv(resultdir+'/var_beta_'+str(it)+'.csv.zip', index=False, compression='zip', sep=',')
+        dfv.to_csv(resultdir+'/var_beta.csv.zip', index=False, compression='zip', sep=',')
         np.savetxt(resultdir+'/mean_V.txt', mean_V)
         np.savetxt(resultdir+'/var_V.txt', var_V)
         np.savetxt(resultdir+'/mean_sigma2.txt', mean_sigma2.reshape(1,1))
