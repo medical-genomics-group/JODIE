@@ -27,14 +27,20 @@ source *nameofyourenv*/bin/activate
 ```
 
 The sequence of the programs is:
-1. Preprocessing vcf files with genotype information to have the data format required by the Gibbs sampler:
-   *preprocessing_data_v1.py*\\
+1. **preprocessing_data_v1.py**
+
+   Preprocessing vcf files with genotype information to have the data format required by the Gibbs sampler
+   
    Needed input: vcf files with genotype information, tab delimited file with id information for trios and duos
-2. Calculating X.T@X: *calc_xtx.py*
-3. Processing phenotype to have the same order as the genotype matrix: *order_phenotype.py*
-4. Running Gibbs sampler: parental_gibbs_stdX_MPI.py
-5. Plotting
-6. Predicting
+2. **calc_xtx.py**
+ 
+   Calculating the standardized genotype matrix squared
+   
+   Needed input: genotype file created in step 1
+5. Processing phenotype to have the same order as the genotype matrix: *order_phenotype.py*
+6. Running Gibbs sampler: parental_gibbs_stdX_MPI.py
+7. Plotting
+8. Predicting
 
 Common input parameters are:
 ```
