@@ -70,7 +70,7 @@ Two types of simulations can be generated:
 2. Using real genotype data
 
 ### 1. With simulated genotype
-The genotype matrix is simulated in the needed file format using **preprocessing_vcf_MC.py**. The corresponding phenotype is generated with **genY.py**.
+The genotype matrix is simulated in the needed file format using **preprocessing_vcf_MC.py**. The corresponding phenotype is generated with **genYdata.py**.
 
 ### 2. With real genotype data
 The phenotype and effects are generated using **genYdata.py**.
