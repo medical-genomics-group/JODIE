@@ -64,15 +64,17 @@ For information about which input parameters a program requires and how to run i
 Be aware that the number of genetic components is often hard-coded in the preprocessing and plotting steps, as these programs require a certain order.
 
 ## Output of Gibbs sampler
-+ mean_betasXX.csv: posterior mean of effects after XX iterations (incl. burnin)
-+ mean_prob.txt: posterior exclusion probability for each marker (all genetic components are either included or excluded)
++ mean_betas.csv.zip: posterior mean of effects 
++ mean_prob.txt: posterior inclusion probability for each marker (how often has the marker been included in the model)
++ mean_sigma2.txt: posterior mean of residual variance
++ mean_V.txt: posterior mean of variance of effects (if different groups are given
 The posterior means are saved every 500 iterations (XX denotes the iteration). 
 
 During the burnin, the current estimate of every 500 iterations is saved to be able to restart the Gibbs sampler if necesseary. This includes:
 + beta_XX.csv.zip: effects
 + epsilonXX.txt: residual errors (can be used as phenotype file when restarting)
 + L_XX.txt: part of covariance matrix V = LDL.T
-+ 
++ prob_XX.txt: tracker if marker is included in model (1) or not (0) for iteration XX
 
 ## Simulations
 Two types of simulations can be generated:
