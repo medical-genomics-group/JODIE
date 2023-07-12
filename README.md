@@ -27,20 +27,26 @@ source *nameofyourenv*/bin/activate
 ```
 
 The sequence of the programs is:
-1. **preprocessing_data_v1.py**
-
-   Preprocessing vcf files with genotype information to have the data format required by the Gibbs sampler
-   
-   Needed input: vcf files with genotype information, tab delimited file with id information for trios and duos
-2. **calc_xtx.py**
- 
-   Calculating the standardized genotype matrix squared
-   
-   Needed input: genotype file created in step 1
-5. Processing phenotype to have the same order as the genotype matrix: *order_phenotype.py*
-6. Running Gibbs sampler: parental_gibbs_stdX_MPI.py
-7. Plotting
-8. Predicting
+1. **preprocessing_vcf_data.py**\
+   Preprocessing vcf files with genotype information to have the data format required by the Gibbs sampler\
+   Needed input:
+   + vcf files with genotype information
+   + tab delimited files with id information for trios and duos separately
+2. **calc_xtx.py**\
+   Calculating the standardized genotype matrix squared\
+   Needed input:
+   + genotype file created in step 1
+   + list in txt format with line number of individual with missing phenotype (according to line in genotype file)
+   Step needs to be rerun for different phenotypes if there are individuals with missing phenotypes that are removed
+3. **parental_gibbs_sampler.py**\
+   Estimating parameters using a Gibbs sampler\
+   Needed input:
+   + genotype file created in step 1
+   + XtX file created in step 2
+   + phenotype file in txt format without header in the same order as the genotype matrix
+   + list in txt format with line number of individual with missing phenotype (according to line in genotype file) - these individuals will be removed from the analysis
+4. Plotting
+5. Predicting
 
 Common input parameters are:
 ```
@@ -50,7 +56,7 @@ Common input parameters are:
 --y path to phenotype file in txt format
 --xfiles path to genotype files in zarr format; multiple files are separated by space
 --dir path to output directory
---g number of markers in each group if grouping is desired; otherwise g=p (either g or gindex is needed as input parameter, not both)
+--g number of markers in each group if grouping is desired; otherwise g=p; this assumes that markers are ordered in groups in sequence (either g or gindex is needed as input parameter, not both)
 --gindex txt file with information about which group each marker belongs to in the same order as the markers in the genotype matrix (either g or gindex is needed as input parameter, not both)
 ```
 For information about which input parameters a program requires and how to run it, have a look at the first few lines of each program.
