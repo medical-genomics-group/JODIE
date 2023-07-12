@@ -94,6 +94,9 @@ Trace plots:
 + trace_V.png: (co)variances as function of iterations
 + trace_Z.png: number of included markers as function of iterations
 
+## Association studies
+Check if marker is included by checking if beta pm variance includes 0.
+
 ## Simulations
 Two types of simulations can be generated:
 1. Including a simulated genotype
