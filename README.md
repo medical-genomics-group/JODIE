@@ -64,10 +64,14 @@ For information about which input parameters a program requires and how to run i
 Be aware that the number of genetic components is often hard-coded in the preprocessing and plotting steps, as these programs require a certain order.
 
 ## Output of Gibbs sampler
-+ mean_betas.csv.zip: posterior mean of effects 
-+ mean_prob.txt: posterior inclusion probability for each marker (how often has the marker been included in the model)
++ mean_betas.csv.zip: posterior mean of effects where columns correspond to the genetic components and rows to the markers
++ var_betas.csv.zip: variance of effects
++ mean_prob.txt: posterior inclusion probability for each marker (how often has the marker been included in the model); the marker is either included for all genetic components or not, thus only one column
++ var_prob.txt: variance of posterior inclusion probability
 + mean_sigma2.txt: posterior mean of residual variance
-+ mean_V.txt: posterior mean of variance of effects (if different groups are given
++ var_sigma2.txt: variance of residual variance
++ mean_V.txt: posterior mean of variance of effects (if the variance is estimated for different groups, the variances of each group are given one after the other)
++ var_V.txt: variance of variance of effects
 The posterior means are saved every 500 iterations (XX denotes the iteration). 
 
 During the burnin, the current estimate of every 500 iterations is saved to be able to restart the Gibbs sampler if necesseary. This includes:
@@ -75,6 +79,15 @@ During the burnin, the current estimate of every 500 iterations is saved to be a
 + epsilonXX.txt: residual errors (can be used as phenotype file when restarting)
 + L_XX.txt: part of covariance matrix V = LDL.T
 + prob_XX.txt: tracker if marker is included in model (1) or not (0) for iteration XX
++ sigma2_XX.txt: residual variance of current iteration
++ V_XX.txt: variance of effects of current iteration
++ trace_sigma2XX.txt: residual variance for each iteration (rows = iterations)
++ trace_VXX.txt: variance of effects for each iterations (
+
+Trace plots:
++ trace_sigma2.png
++ trace_V.png
++ trace_Z.png
 
 ## Simulations
 Two types of simulations can be generated:
