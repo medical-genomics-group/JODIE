@@ -72,6 +72,8 @@ Be aware that the number of genetic components is often hard-coded in the prepro
 + var_sigma2.txt: variance of residual variance
 + mean_V.txt: posterior mean of variance of effects (if the variance is estimated for different groups, the variances of each group are given one after the other)
 + var_V.txt: variance of variance of effects
++ trace_sigma2.txt: residual variance for each iteration (rows = iterations)
++ trace_V.txt: variance of effects for each iteration (rows = iterations), only variances are saved
 + trace_Z.txt: number of included markers for each iteration (rows = iterations)
 The posterior means are saved every 500 iterations (XX denotes the iteration). 
 
@@ -84,13 +86,13 @@ During the burnin, the current estimate of every 500 iterations is saved to be a
 + V_XX.txt: variance of effects of current iteration
 + Z_XX.txt: number of markers included in the model at iteration XX
 + trace_sigma2XX.txt: residual variance for each iteration until iteration XX (rows = iterations)
-+ trace_VXX.txt: variance of effects for each iteration until iteration XX (rows = iterations)
++ trace_Vg_XX.txt: variance of effects for each iteration until iteration XX for group g (rows = iterations), only variances are saved
 + trace_ZXX.txt: number of included markers for each iteration until iteration XX (rows = iterations)
 
 Trace plots:
-+ trace_sigma2.png
-+ trace_V.png
-+ trace_Z.png
++ trace_sigma2.png: residual variance as function of iteration
++ trace_V.png: (co)variances as function of iterations
++ trace_Z.png: number of included markers as function of iterations
 
 ## Simulations
 Two types of simulations can be generated:
