@@ -72,6 +72,7 @@ Be aware that the number of genetic components is often hard-coded in the prepro
 + var_sigma2.txt: variance of residual variance
 + mean_V.txt: posterior mean of variance of effects (if the variance is estimated for different groups, the variances of each group are given one after the other)
 + var_V.txt: variance of variance of effects
++ trace_Z.txt: number of included markers for each iteration (rows = iterations)
 The posterior means are saved every 500 iterations (XX denotes the iteration). 
 
 During the burnin, the current estimate of every 500 iterations is saved to be able to restart the Gibbs sampler if necesseary. This includes:
@@ -81,8 +82,10 @@ During the burnin, the current estimate of every 500 iterations is saved to be a
 + prob_XX.txt: tracker if marker is included in model (1) or not (0) for iteration XX
 + sigma2_XX.txt: residual variance of current iteration
 + V_XX.txt: variance of effects of current iteration
-+ trace_sigma2XX.txt: residual variance for each iteration (rows = iterations)
-+ trace_VXX.txt: variance of effects for each iterations (
++ Z_XX.txt: number of markers included in the model at iteration XX
++ trace_sigma2XX.txt: residual variance for each iteration until iteration XX (rows = iterations)
++ trace_VXX.txt: variance of effects for each iteration until iteration XX (rows = iterations)
++ trace_ZXX.txt: number of included markers for each iteration until iteration XX (rows = iterations)
 
 Trace plots:
 + trace_sigma2.png
