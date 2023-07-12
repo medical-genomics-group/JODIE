@@ -1,50 +1,30 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 """
-
 Install dependencies:
 ```
-pip install numpy loguru scikit-allel zarr
+pip install numpy loguru scikit-allel zarr pandas tqdm
 ```
 python preprocessing_vcf.py 
---index_trios /data/robin/EBB_server/OUTPUTS/Ped_for_Matthew/Trios.ped
---index_duos /data/robin/EBB_server/OUTPUTS/Ped_for_Matthew/Duos.ped
---inputfiles /data/robin/EBB_server/OUTPUTS/Imputed_for_Matthew/chunks/chr22/chr22_chunk0_POO.vcf.gz /data/robin/EBB_server/OUTPUTS/Imputed_for_Matthew/chunks/chr22/chr22_chunk1_POO.vcf.gz
---dir /data/robin/EBB_server/OUTPUTS/Imputed_for_Matthew/chunks/chr22/imputedX/
+--index_trios Trios.ped
+--index_duos Duos.ped
+--inputfiles path-to-file/chr1.vcf.gz path-to-file/chr2.vcf.gz path-to-file/chr3.vcf.gz
+--dir path-to-output-directory/
+--only_trios True
+````
+--index_trios tab delimited file with id information for trios (required)
+--index_duos tab delimited file with id information for duos, incl. nan values for the missing parent
+--dir path to output directory where zarr files are stored (required)
+--only_trios process only trios, by default false
 """
-import numpy as np
 import sys
 import argparse
+import numpy as np
 from loguru import logger
 import allel
 import zarr
 import pandas as pd
 from tqdm import trange
-
-def gen_data(n, p, rng):
-    prob = 0.2
-    trans = 0.5
-    ## Simulate parents alleles
-    # mother
-    xm_a1 = rng.binomial(1, prob, size=(n, p))
-    xm_a2 = rng.binomial(1, prob, size=(n, p))
-    # father
-    xf_a1 = rng.binomial(1, prob, size=(n, p))
-    xf_a2 = rng.binomial(1, prob, size=(n, p))
-    ## Indicator of transmission of alleles from parents to offspring
-    r_m = rng.binomial(1, trans, size=(n, p))
-    r_f = rng.binomial(1, trans, size=(n, p))
-    ## Simulated alleles of child
-    xc_a1 = r_m * xm_a2 + (1 - r_m) * xm_a1 #allele from mother
-    xc_a2 = r_f * xf_a2 + (1 - r_f) * xf_a1 #allele from father
-    X = np.zeros((p,3*n,2))
-    X[:,:n,0] = xc_a1.T
-    X[:,:n,1] = xc_a2.T
-    X[:,n:2*n,0] = xm_a1.T
-    X[:,n:2*n,1] = xm_a2.T
-    X[:,2*n:,0] = xf_a1.T
-    X[:,2*n:,1] = xf_a2.T
-    return X
 
 def main(inputfiles, index_trios, index_duos, only_trios, dir, k):
 
@@ -135,6 +115,7 @@ def main(inputfiles, index_trios, index_duos, only_trios, dir, k):
 
         ## combine 2 alleles to 0,1,2
         xa = gt[:,:,0] + gt[:,:,1]
+        logger.info(f"{np.unique(xa)=}")
         logger.info(f"{xa=}")
         ## replace NAN indexed with -1 or -2 with 9
         xa = np.where(np.equal(xa, -1), 9, xa)
@@ -165,21 +146,21 @@ def main(inputfiles, index_trios, index_duos, only_trios, dir, k):
 
         ## remove markers depending on trio data only
         sd = np.nanstd(x[:, 0:n_trios], axis=1)
-        logger.info(f"{np.unique(np.nanstd(x[:,0:n_trios], axis=1))=}")
+        logger.info(f"{np.unique(sd)=}")
         did0 = np.array(np.where(sd[0::k]==0)).reshape(-1)
         did1 = np.array(np.where(sd[1::k]==0)).reshape(-1)
         did2 = np.array(np.where(sd[2::k]==0)).reshape(-1)
         did3 = np.array(np.where(sd[3::k]==0)).reshape(-1)
         did = np.unique(np.concatenate([did0, did1, did2, did3]))
-        #did0 = np.array(np.where(np.nansum(x, axis=1)[0::k]==0)).reshape(-1)
-        #did1 = np.array(np.where(np.nansum(x, axis=1)[1::k]==0)).reshape(-1)
-        #did2 = np.array(np.where(np.nansum(x, axis=1)[2::k]==0)).reshape(-1)
-        #did3 = np.array(np.where(np.nansum(x, axis=1)[3::k]==0)).reshape(-1)
+        did0 = np.array(np.where(np.isnan(sd[0::k]))).reshape(-1)
+        did1 = np.array(np.where(np.isnan(sd[1::k]))).reshape(-1)
+        did2 = np.array(np.where(np.isnan(sd[2::k]))).reshape(-1)
+        did3 = np.array(np.where(np.isnan(sd[3::k]))).reshape(-1)
         logger.info(f"{did0=}")
         logger.info(f"{did1=}")
         logger.info(f"{did2=}")
         logger.info(f"{did3=}")
-        #did = np.unique(np.concatenate([did, did0, did1, did2, did3]))
+        did = np.unique(np.concatenate([did, did0, did1, did2, did3]))
         logger.info(f"{did=}")
         if len(did) > 0:
             logger.info(f"{x.shape=}")

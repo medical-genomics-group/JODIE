@@ -1,12 +1,20 @@
+# -*- coding: utf-8 -*-
 """
 
 Install dependencies:
 ```
 pip install numpy loguru scipy zarr dask
 ```
-run with n processes:
-python calc_XtX.py --n 10000 --p 20000 --x MC/genotype.zarr --dir MC/ --pheno test
---rmid  
+python calc_xtx.py --n 10000 --p 100000 --k 4 --pheno pheno --xfile genotype.zarr/ --dir outputdir/ --rmid list_missingpheno.txt
+```
+--n number of individuals (required)
+--p number of markers (required)
+--k number of genetic components (k=2,3,4); default=4
+--xfile genotype file created in preprocessing_vcf_data.py (required)
+--dir path to output directory (required)
+--rmid list in txt format with line number of individual with missing phenotype (according to line in genotype file)
+--pheno name of phenotype for output filename
+ATTENTION: If there are columns with zero variation, the columns will also be deleted from the genotype matrix and the genotype matrix will be overwritten!
 """
 
 import sys
@@ -25,7 +33,7 @@ def main(n, p, k, xfile, dir, rmid, pheno):
     X = xdata.compute()
     X = X.astype('float')
     logger.info(f"{np.unique(np.nanstd(X, axis=0))=}")
-    #logger.info(f"{np.unique(np.nanmean(X, axis=0))=}")
+    logger.info(f"{np.unique(np.nanmean(X, axis=0))=}")
     ## delete rows where phenotype is na
     if rmid is not None:
         lines = list(np.loadtxt(rmid, delimiter=",").astype('int'))
@@ -34,18 +42,12 @@ def main(n, p, k, xfile, dir, rmid, pheno):
         n = len(X)
     ## check for possible nan columns due to removed lines
     logger.info(f"{np.unique(np.nanstd(X, axis=0))=}")
-    #logger.info(f"{np.unique(np.nanmean(X, axis=0))=}")
+    logger.info(f"{np.unique(np.nanmean(X, axis=0))=}")
     sd = np.nanstd(X, ddof=1, axis=0)
-    did0 = np.array(np.where(sd[0::k]==0)).reshape(-1)
-    did1 = np.array(np.where(sd[1::k]==0)).reshape(-1)
-    did2 = np.array(np.where(sd[2::k]==0)).reshape(-1)
-    did3 = np.array(np.where(sd[3::k]==0)).reshape(-1)
-    did = np.unique(np.concatenate([did0, did1, did2, did3]))
-    logger.info(f"{did0=}")
-    logger.info(f"{did1=}")
-    logger.info(f"{did2=}")
-    logger.info(f"{did3=}")
-    logger.info(f"{did=}")
+    did= np.array(np.where(sd[0::k]==0)).reshape(-1)
+    for i in range(1,k):
+        np.append(did, np.array(np.where(sd[i::k]==0)).reshape(-1))
+    did = np.unique(did)
     lid = []
     if len(did) > 0:
         logger.info(f"{X.shape=}")
@@ -66,10 +68,13 @@ def main(n, p, k, xfile, dir, rmid, pheno):
     zxtx = zarr.array(XtX, chunks=(1000,None))
     logger.info(f"{zxtx.info=}")
     zarr.save(dir+'/XtX_'+pheno+'.zarr', zxtx)
-    z = zarr.array(X, chunks=(None,1000))
-    logger.info(f"{z.info=}")
-    zarr.save(dir+'/std_genotype_'+pheno+'.zarr', z)
-
+    if len(did) > 0:
+        logger.info(f"{lid=}")
+        X = xdata.compute()
+        X = np.delete(X, lid, axis=1)
+        z = zarr.array(X, chunks=(None,1000))
+        logger.info(f"{z.info=}")
+        zarr.save(dir+'/genotype.zarr', z)
 
 
 ##########################
@@ -80,8 +85,8 @@ if __name__ == "__main__":
     parser.add_argument('--k', type=int, default=4, help='number of family member incl. POO (2,3 or 4; default=4)')
     parser.add_argument('--x', type=str, help='genotype matrix filename (zarr files)', required = True)
     parser.add_argument('--dir', type=str, help='path to storage directory', required = True)
-    parser.add_argument('--pheno', type=str, help='name of phenotype', required = True)
     parser.add_argument('--rmid', type=str, help='list of ids to delete (default is None)')
+    parser.add_argument('--pheno', type=str, help='name of phenotype', required=True)
     args = parser.parse_args()
     logger.info(args)
 
@@ -99,7 +104,7 @@ if __name__ == "__main__":
         k = args.k, # number of traits
         xfile = args.x, # genotype file
         dir = args.dir, # path to results directory
-        rmid = args.rmid, # individuals with missing phenotypic values
+        rmid = args.rmid,
         pheno = args.pheno,
         ) 
     logger.info("Done.")
