@@ -5,7 +5,7 @@ Install dependencies:
 ```
 pip install numpy loguru scikit-allel zarr pandas tqdm
 ```
-python preprocessing_vcf.py 
+python preprocessing_vcf_data.py 
 --index_trios Trios.ped
 --index_duos Duos.ped
 --inputfiles path-to-file/chr1.vcf.gz path-to-file/chr2.vcf.gz path-to-file/chr3.vcf.gz

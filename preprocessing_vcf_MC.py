@@ -4,21 +4,24 @@
 
 Install dependencies:
 ```
-pip install numpy loguru scikit-allel zarr
+pip install numpy loguru tqdm zarr
 ```
-python preprocessing_vcf_MC.py --n 10000 --p 5000 --ntrios 10000 --na 0
+python preprocessing_vcf_MC.py --n 20000 --p 5000 --ntrios 10000 --na 0 -maf 0.2
+````
+--n number of individuals (required)
+--p number of markers (required)
+--ntrios number of trios (required)
+--na number of not genotyped mothers, fathers are calculated as n - na - ntrios; set to 0 if only trios should be generated; missing parent will be inferred
+--maf minor allele frequency used for all markers; default = 0.2
 """
-import numpy as np
 import sys
 import argparse
+import numpy as np
 from loguru import logger
-import allel
 import zarr
-import pandas as pd
 from tqdm import trange
 
-def gen_data(n, p, rng):
-    prob = 0.2
+def gen_data(n, p, prob, rng):
     trans = 0.5
     ## Simulate parents alleles
     # mother
@@ -42,7 +45,7 @@ def gen_data(n, p, rng):
     X[:,2*n:,1] = xf_a2.T
     return X
 
-def main(n, p, na, n_trios, k):
+def main(n, p, na, n_trios, k, prob):
 
     missing = True if na > 0 else False
 
@@ -77,7 +80,7 @@ def main(n, p, na, n_trios, k):
     rng = np.random.default_rng()
 
     # generate data
-    gt = gen_data(n,p,rng)
+    gt = gen_data(n, p, prob, rng)
     id = np.arange(3*n).reshape(n, 3, order='F')
     logger.info(f"{id=}")
     xa = gt[:,:,0] + gt[:,:,1]
@@ -85,42 +88,27 @@ def main(n, p, na, n_trios, k):
     logger.info(f"{n=}, {p=}, {n_trios=}")
 
     # add line with nans to be able to indicate missing data
-    #a = np.ones((p,1)) * 9
-    #xa = np.concatenate((xa,a), axis=1)
+    a = np.ones((p,1)) * 9
+    xa = np.concatenate((xa,a), axis=1)
     x = np.zeros((p*k,n), dtype='int8')
     # fill x with child, mother, father genotype
     for i in range(k-1):
         x[i::k] = xa[:,id[:,i]]
-    x1 = x.copy()
-    # add parent of origin information
     # add parent of origin information
     xpoo = np.zeros((p, n), dtype='int8')
-    xpoo1 = np.zeros((p, n), dtype='int8')
     ## 1 if minor allele is coming from the mother
     ## return two arrays with indices for dim1 and dim2
     wm = np.where((np.equal(gt[:,id[:,0],0],1) & np.equal(gt[:,id[:,0],1],0)))
     #logger.info(f"{wm=}")
     xpoo[wm[0], wm[1]] = 1
-    xpoo1[wm[0], wm[1]] = -1
-    #x[(k-1)::k] = np.where((np.equal(xpoo,1) & np.equal(x[1::k],1) & np.equal(x[2::k],1)),1,0) ## changed
-    #logger.info(f"{np.where(xpoo==1)=}")
     ## -1 if minor allele is coming from the father
     wf = np.where((np.equal(gt[:,id[:,0],0],0) & np.equal(gt[:,id[:,0],1],1)))
     xpoo[wf[0], wf[1]] = -1
-    xpoo1[wf[0], wf[1]] = 1
-    #logger.info(f"{wf=}")
-    #logger.info(f"{np.where(xpoo==-1)=}")
-    #x[(k-1)::k] = np.where((np.equal(xpoo,-1) & np.equal(x[1::k],1) & np.equal(x[2::k],1)),-1,x[(k-1)::k]) ## changed
-    x[(k-1)::k] = xpoo ##changed
-    x1[(k-1)::k] = xpoo1 ##changed
+    x[(k-1)::k] = xpoo
     logger.info(f"{x=}")
-    #np.savez_compressed('genotype.npz', x.T)
     z = zarr.array(x.T, chunks=(None,1000))
-    z1 = zarr.array(x1.T, chunks=(None,1000))
     logger.info(f"{z.info=}")
-    logger.info(f"{z1.info=}")
-    zarr.save('MC/cat_test/genotype.zarr', z)
-    zarr.save('MC/cat_test/genotype1.zarr', z1)
+    zarr.save('genotype.zarr', z)
 
     # simulate missing data
     if missing:
@@ -285,7 +273,7 @@ def main(n, p, na, n_trios, k):
                         
         z = zarr.array(x.T, chunks=(None,1000))
         logger.info(f"{z.info=}")
-        zarr.save('MC/cat_test2/genotype_imputed.zarr', z)
+        zarr.save('genotype_imputed.zarr', z)
         #np.savez_compressed('genotype_imputed.npz', x.T)
 
 
@@ -296,6 +284,7 @@ if __name__ == "__main__":
     parser.add_argument('--p', type=int, help='number of markers', required = True)
     parser.add_argument('--ntrios', type=int, help='number of trios', required=True)
     parser.add_argument('--na', type=int, help='number of not genotyped mothers, fathers are calculated as n - na - ntrios', required=True)
+    parser.add_argument('--maf', type=int, default = 0.2, help='minor allele frequency (default=0.2)')
     args = parser.parse_args()
     logger.info(args)
 
@@ -314,5 +303,6 @@ if __name__ == "__main__":
         n_trios = args.ntrios,
         na = args.na, 
         k = 4, # number of genetic components
+        prob = args.maf,
         ) 
     logger.info("Done.")
