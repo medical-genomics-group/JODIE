@@ -63,7 +63,16 @@ Common input parameters are:
 For information about which input parameters a program requires and how to run it, have a look at the first few lines of each program.
 Be aware that the number of genetic components is often hard-coded in the preprocessing and plotting steps, as these programs require a certain order.
 
-### 4. Output
+## Output of Gibbs sampler
++ mean_betasXX.csv: posterior mean of effects after XX iterations (incl. burnin)
++ mean_prob.txt: posterior exclusion probability for each marker (all genetic components are either included or excluded)
+The posterior means are saved every 500 iterations (XX denotes the iteration). 
+
+During the burnin, the current estimate of every 500 iterations is saved to be able to restart the Gibbs sampler if necesseary. This includes:
++ beta_XX.csv.zip: effects
++ epsilonXX.txt: residual errors (can be used as phenotype file when restarting)
++ L_XX.txt: part of covariance matrix V = LDL.T
++ 
 
 ## Simulations
 Two types of simulations can be generated:
