@@ -31,7 +31,7 @@ The sequence of the programs is:
    Preprocessing vcf files with genotype information to have the data format required by the Gibbs sampler\
    Needed input:
    + vcf files with genotype information
-   + tab delimited files with id information for trios and duos separately
+   + tab delimited files with id information for trios (and separately for duos if needed; missing parent will be inferred)
 2. **calc_xtx.py**\
    Calculating the standardized genotype matrix squared\
    Needed input:
