@@ -31,8 +31,28 @@ The sequence of the programs is:
 1. Preprocessing vcf files with genotype information to have the data format required by the Gibbs sampler:
    *preprocessing_data_v1.py*
    Needed input: vcf files, id file
+2. Calculating X.T@X: *calc_xtx.py*
 3. Processing phenotype to have the same order as the genotype matrix: *order_phenotype.py*
-4.) Gibbs:
-parental_gibbs_stdX_MPI.py
-1. plotting
-2. predicting
+4. Running Gibbs sampler: parental_gibbs_stdX_MPI.py
+5. Plotting
+6. Predicting
+
+Common input parameters are:
+```
+--n number of individuals
+--p number of markers
+--k number of genetic components (default = 4)
+--y path to phenotype file in txt format
+--xfiles path to genotype files in zarr format; multiple files are separated by space
+--dir path to output directory
+--g number of markers in each group if grouping is desired; otherwise g=p (either g or gindex is needed as input parameter, not both)
+--gindex txt file with information about which group each marker belongs to in the same order as the markers in the genotype matrix (either g or gindex is needed as input parameter, not both)
+--index_trios
+--index_duos
+--only_trios
+--inputfiles
+--rmid
+--iters
+--burnin
+--xtx
+```
