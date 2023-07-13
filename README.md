@@ -36,8 +36,8 @@ The sequence of the programs is:
    Calculating the standardized genotype matrix squared\
    Needed input:
    + genotype file created in step 1
-   + list in txt format with line number of individual with missing phenotype (according to line in genotype file)
-   Step needs to be rerun for different phenotypes if there are individuals with missing phenotypes that are removed
+   + list in txt format with line number of individual with missing phenotype (according to line in genotype file)\
+   This step needs to be rerun for different phenotypes if there are individuals with missing phenotypes that are removed.
 3. **parental_gibbs_sampler.py**\
    Estimating parameters using a Gibbs sampler\
    Needed input:
@@ -94,9 +94,6 @@ Trace plots:
 + trace_V.png: (co)variances as function of iterations
 + trace_Z.png: number of included markers as function of iterations
 
-## Association studies
-Check if marker is included by checking if beta pm variance includes 0.
-
 ## Simulations
 Two types of simulations can be generated:
 1. Including a simulated genotype
@@ -109,3 +106,9 @@ The genotype matrix is simulated in the needed file format using **preprocessing
 The phenotype and effects are generated using **genY.py**.
 
 Steps 2 onwards are the same as for real data.
+
+## Association studies
+It is possible to perform association studies with the framework. However, special care needs to be taken if the associations are tested for each genetic component individually. The model is set up so that markers are either included in the model for all genetic components or not included at all. Therefore, if a marker is included with a high posterior inclusion probability, one needs to check for each of the genetic components if the effect size +/- standard deviation includes 0. If 0 is covered by effect size +/- standard deviation, there is no association.
+
+## Inferring the genotype of a missing parent
+Using Bayes theorem
