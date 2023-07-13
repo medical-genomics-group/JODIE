@@ -111,4 +111,5 @@ Steps 2 onwards are the same as for real data.
 It is possible to perform association studies with the framework. However, special care needs to be taken if the associations are tested for each genetic component individually. The model is set up so that markers are either included in the model for all genetic components or not included at all. Therefore, if a marker is included with a high posterior inclusion probability, one needs to check for each of the genetic components if the effect size +/- standard deviation includes 0. If 0 is covered by effect size +/- standard deviation, there is no association.
 
 ## Inferring the genotype of a missing parent
-Using Bayes theorem
+It is possible to infer the genotype of a missing parent in **preprocessing_vcf_data.py** using the information provided by trios and Bayes theorem. To do so, a list with the id information for duos needs to be provided additionally to the one of the trios.
+Be aware that the analysis for duos, even with inferring the missing parent, will be biased.
