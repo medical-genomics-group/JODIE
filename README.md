@@ -1,4 +1,4 @@
-# Parental analysis
+# JODIE: Joint mOdel for Direct and Indirect Effects
 The code for jointly analysing direct, indirect and parent-of-origin effects is written in python using MPI, and was tested with python 3.11.1 and openmpi 4.1.4.
 
 ### 1. Set up python environment
