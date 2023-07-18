@@ -5,12 +5,12 @@ Install dependencies:
 ```
 pip install numpy loguru scipy zarr dask
 ```
-python calc_xtx.py --n 10000 --p 100000 --k 4 --pheno pheno --xfile genotype.zarr/ --dir outputdir/ --rmid list_missingpheno.txt
+python calc_xtx.py --n 10000 --p 100000 --k 4 --pheno pheno --x genotype.zarr/ --dir outputdir/ --rmid list_missingpheno.txt
 ```
 --n number of individuals (required)
 --p number of markers (required)
 --k number of genetic components (k=2,3,4); default=4
---xfile genotype file created in preprocessing_vcf_data.py (required)
+--x genotype file created in preprocessing_vcf_data.py (required)
 --dir path to output directory (required)
 --rmid list in txt format with line number of individual with missing phenotype (according to line in genotype file)
 --pheno name of phenotype for output filename
