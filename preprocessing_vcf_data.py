@@ -147,20 +147,11 @@ def main(inputfiles, index_trios, index_duos, only_trios, dir, k):
         ## remove markers depending on trio data only
         sd = np.nanstd(x[:, 0:n_trios], axis=1)
         logger.info(f"{np.unique(sd)=}")
-        did0 = np.array(np.where(sd[0::k]==0)).reshape(-1)
-        did1 = np.array(np.where(sd[1::k]==0)).reshape(-1)
-        did2 = np.array(np.where(sd[2::k]==0)).reshape(-1)
-        did3 = np.array(np.where(sd[3::k]==0)).reshape(-1)
-        did = np.unique(np.concatenate([did0, did1, did2, did3]))
-        did0 = np.array(np.where(np.isnan(sd[0::k]))).reshape(-1)
-        did1 = np.array(np.where(np.isnan(sd[1::k]))).reshape(-1)
-        did2 = np.array(np.where(np.isnan(sd[2::k]))).reshape(-1)
-        did3 = np.array(np.where(np.isnan(sd[3::k]))).reshape(-1)
-        logger.info(f"{did0=}")
-        logger.info(f"{did1=}")
-        logger.info(f"{did2=}")
-        logger.info(f"{did3=}")
-        did = np.unique(np.concatenate([did, did0, did1, did2, did3]))
+        did = []
+        for i in range(0,k):
+            did = np.append(did, np.array(np.where(sd[i::k]==0)).reshape(-1))
+            did = np.append(did, np.array(np.where(np.isnan(sd[i::k]))).reshape(-1))
+        did = np.unique(did)
         logger.info(f"{did=}")
         if len(did) > 0:
             logger.info(f"{x.shape=}")
