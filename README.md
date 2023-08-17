@@ -15,7 +15,7 @@ deactivate
 ### 2. Get code
 
 ```
-git clone https://github.com/medical-genomics-group/parental
+git clone https://github.com/medical-genomics-group/JODIE
 ```
 
 ### 3. Run code
