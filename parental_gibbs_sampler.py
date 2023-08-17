@@ -26,7 +26,8 @@ Options:
 --g number of markers in each group; this assumes that markers are ordered in groups in sequence (either g or gindex is needed as input parameter, not both)
 --gindex txt file with information about which group each marker belongs to in the same order as the markers in the genotype matrix (either g or gindex is needed as input parameter, not both)
 --itc counter for updating residuals (after number of processes times itc markers); default = 2 (if set too high, the Gibbs sampler will diverge)
---restart default = False; Gibbs sampler can be restarted using results saved at it 1000
+--restart default = False; Gibbs sampler can be restarted using results saved at it 1000; 
+CAUTION: files for restarting are taken from resultdir, but new results will be overwrite old results in resultdir
 """
 import os
 os.environ["OMP_NUM_THREADS"] = "1"
@@ -235,13 +236,12 @@ def main(n, p, k, groups, gindex, iters, burnin, xfiles, xtxfiles, yfile, itc, r
             pi = init["pi"]
             L = init["L"]
         else:
-            V = np.loadtxt(resultdir+'/V_1000.txt')
-            V = np.split(V, G, axis=0)
+            V = np.loadtxt(resultdir+'/V_1000.txt').reshape(G,k,k)
             sigma2 = np.loadtxt(resultdir+'/sigma2_1000.txt')
             beta = pd.read_csv(resultdir+'/beta_1000.csv.zip', compression='zip').to_numpy()           
             beta = np.concatenate([beta, np.zeros((p_split*worldSize-p, k))], axis=0)
-            L = np.array(G*[np.tri(k,k)])
-            Z_sum = np.loadtxt(resultdir+'/Z_1000.txt').astype(np.int64)
+            L = np.loadtxt(resultdir+'/L_1000.txt').reshape(G,k,k)
+            Z_sum = np.loadtxt(resultdir+'/Z_1000.txt').astype(np.int32).reshape(G)
             pi = init["pi"]
             for g in range(G):
                 pi[g] = rng.dirichlet((groups[g]-Z_sum[g], Z_sum[g]))
@@ -397,7 +397,7 @@ def main(n, p, k, groups, gindex, iters, burnin, xfiles, xtxfiles, yfile, itc, r
             trace_V[it] = V
             trace_sigma2[it] = sigma2
             trace_Z[it] = Z_sum
-            if (it%500==0) and (it < burnin):
+            if (it%500==0) and (it > 0) and (it < burnin):
                 dfm = pd.DataFrame(beta[:p], columns=['child', 'mother', 'father', 'poo'])
                 dfm.to_csv(resultdir+'/beta_'+str(it)+'.csv.zip', index=False, compression='zip', sep=',')
                 np.savetxt(resultdir+'/V_'+str(it)+'.txt', V.reshape(G*k,k))
