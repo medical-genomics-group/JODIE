@@ -47,7 +47,6 @@ The sequence of the programs is:
    + list in txt format with line number of individual with missing phenotype (according to line in genotype file) - these individuals will be removed from the analysis
 4. **plot_all_traits_1group.py**\
    Plotting variances, covariances, correlations and sigma2 for several traits (only 1 group) 
-6. Predicting
 
 Common input parameters are:
 ```
