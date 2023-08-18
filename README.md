@@ -40,7 +40,7 @@ The sequence of the programs is:
    This step needs to be rerun for different phenotypes if there are individuals with missing phenotypes that are removed.
 3. **parental_gibbs_sampler.py**\
    Estimating parameters using a Gibbs sampler\
-   Needed input:
+   Needed input is required to be able to fit into RAM:
    + genotype file created in step 1
    + XtX file created in step 2
    + phenotype file in txt format without header in the same order as the genotype matrix
