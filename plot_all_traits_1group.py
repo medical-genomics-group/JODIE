@@ -88,9 +88,7 @@ def main(k, resultsdir, traits, outdir):
     for i in range(len(resultsdir)):
         mean_V = np.loadtxt(resultsdir[i]+'mean_V.txt')
         var_V = np.loadtxt(resultsdir[i]+'var_V.txt')
-        # change sign of V_fi
-        mean_V[3,2] *= -1
-        mean_V[2,3] *= -1
+        
         # correlation matrix
         logger.info(f"{mean_V=}")
         corr = ((1/np.sqrt(np.diag(mean_V)))*mean_V).T*(1/np.sqrt(np.diag(mean_V)))
@@ -102,25 +100,20 @@ def main(k, resultsdir, traits, outdir):
         lower_V = mean_V - np.sqrt(var_V)
         lower_corr = ((1/np.sqrt(np.diag(lower_V)))*lower_V).T*(1/np.sqrt(np.diag(lower_V)))
         logger.info(f"{lower_corr=}")
-        # normalize all variances
-        mean_V = np.tril(mean_V)
-        h2 = np.sum(mean_V) - mean_V[2,1]
-        var_V = np.tril(var_V)
-        logger.info(f"{var_V=}")
-        # calculate error bands
-        upper_V = np.tril(upper_V)
-        upper_h2 = np.sum(upper_V) - upper_V[2,1]
-        lower_V = np.tril(lower_V)
-        lower_h2 = np.sum(lower_V) - lower_V[2,1]
-        logger.info(f"{h2=}, {upper_h2=}, {lower_h2=}")
-        mean_V /= h2
-        mean_V[2,1] *= h2
-        upper_V /= upper_h2
-        lower_V /= lower_h2
-        upper_band = np.abs(upper_V - mean_V)
-        lower_band = np.abs(- lower_V + mean_V)
         upper_cband = np.abs(upper_corr - corr)
         lower_cband = np.abs(- lower_corr + corr)
+        
+        # normalize variances by h2
+        mean_V = np.tril(mean_V)
+        var_V = np.tril(var_V)
+        h2 = np.sum(mean_V) - mean_V[2,1] - mean_V[3,0]
+        upper_band = np.abs(np.tril(lower_V) - mean_V)/h2
+        lower_band = np.abs(- np.tril(upper_V) + mean_V)/h2
+        mean_V /= h2
+       
+        # change sign of V_fi for plotting
+        mean_V[3,2] *= -1
+        corr[3,2] *= -1
 
         z = 0
         for row, col in order:
