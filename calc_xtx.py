@@ -46,7 +46,7 @@ def main(n, p, k, xfile, dir, rmid, pheno):
     sd = np.nanstd(X, ddof=1, axis=0)
     did= np.array(np.where(sd[0::k]==0)).reshape(-1)
     for i in range(1,k):
-        np.append(did, np.array(np.where(sd[i::k]==0)).reshape(-1))
+        did = np.append(did, np.array(np.where(sd[i::k]==0)).reshape(-1))
     did = np.unique(did)
     lid = []
     if len(did) > 0:
