@@ -43,8 +43,8 @@ def main(n, p, k, xfile, dir, rmid, pheno):
     logger.info(f"{np.unique(np.nanstd(X, axis=0))=}")
     logger.info(f"{np.unique(np.nanmean(X, axis=0))=}")
     sd = np.nanstd(X, ddof=1, axis=0)
-    did= np.array(np.where(sd[0::k]==0)).reshape(-1)
-    for i in range(1,k):
+    did= []
+    for i in range(0,k):
         did = np.append(did, np.array(np.where(sd[i::k]==0)).reshape(-1))
     did = np.unique(did)
     lid = []
