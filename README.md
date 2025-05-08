@@ -32,39 +32,37 @@ source *nameofyourenv*/bin/activate
 The sequence of the programs is:
 
 #### a.) preprocessing_vcf_data.py
-   Preprocessing vcf files with genotype information to have the data format required by the Gibbs sampler\
-   NaN values will be assigned the value 9 and replaced with the mean value within jodie.py
+   Preprocessing vcf files with genotype information to have the data format required by the Gibbs sampler, separetely for each chromosome\
    Needed input:
    + vcf files with genotype information
    + tab delimited files with id information for trios (and separately for duos if needed; missing parent will be inferred)
+     
    Output:
    + genotype file in zarr format with child, mother, father, parent-of-origin information for each marker
    + rsid file in csv format with CHR, POS, RSID, REF, ALT information
+     
+   File structure for output is assumed to be outdir/chrX/ where X is the chromosome number.
 
 #### b.) calc_xtx.py
-   Calculating the standardized genotype matrix squared\
+   Calculating the standardized genotype matrix squared, separately for each chromosome\
    Needed input:
-   + genotype file created in step 1
-   + list in txt format with line number of individual with missing phenotype (according to line in genotype file)\
+   + genotype file created in step a
+   + list in txt format with line number of individual with missing phenotype (according to line in genotype file)
+     
    Output:
    + standardized and squared matrix calculated for the different component of each marker in zarr format (XtX matrix)
    + rmrsid file in txt format with line number of markers that need to be removed due to zero variation
+     
    This step needs to be rerun for different phenotypes if there are individuals with missing phenotypes that are removed.
 
-#### c.) get_mean_std_rmids.py
-   Calculating the mean and standard devidations of each marker\
-   Needed input:
-   
-   Output:
+#### c.) order_phenotype.py
 
-#### d.) order_phenotype.py
-
-#### e.) jodie.py
+#### d.) jodie.py
    Estimating parameters using a Gibbs sampler\
    Needed input is required to be able to fit into RAM:
-   + genotype file created in step 1
-   + XtX file created in step 2
-   + phenotype file in txt format without header in the same order as the genotype matrix
+   + genotype file created in step a
+   + XtX file created in step b
+   + phenotype file in txt format without header in the same order as the genotype matrix as created in step c
    + list in txt format with line number of individual with missing phenotype (according to line in genotype file) - these individuals will be removed from the analysis
      
    Output:
@@ -100,12 +98,12 @@ The sequence of the programs is:
 
 #### f.) fGWAS.py
 Estimating regression coefficients for one marker at a time using multiple regression.\
-This step is independent of jodie.py and can be run after step d.)\
+This step is independent of jodie.py and can be run after step c.\
 Needed input:
    + genotype file in zarr format
-   + rsid file in csv format with CHR, POS, RSID, REF, ALT information
-   + ordered phenotype file
-Note: rsid file needs to be in the same directory as genotype zarr!
+   + rsid file in csv format with CHR, POS, RSID, REF, ALT information. Note: rsid file needs to be in the same directory as genotype zarr!
+   + ordered phenotype file\
+
 Output:
    + rsid file with regression coefficients and standard error for each marker and each component including intercept (coef1, stde1)
 
@@ -123,19 +121,34 @@ Output:
 For information about which input parameters a program requires and how to run it, have a look at the first few lines of each program.
 Be aware that the number of genetic components is often hard-coded in the preprocessing steps, as these programs require a certain order.
 
+#### Limitations for JODIE:
++ JODIE is set up that all input data needs to fit into RAM. 
++ NaN values within the genotype type can be taken into account with a slightly different setup. Code for nan value is denoted with *_nan*. There is an additional step to be run after step b:\
+  **get_mean_std_rmrsids.py**\
+   Calculating mean and standard deviations for each column, looping over all chromosome, and merging rmrsid files\
+   Needed input:
+   + genotype files created in step a
+   + rmrsid_pheno.txt file created in step b needs to be in the same directory as genotpye files
+     
+   Output:
+   + zarr file with means of columns
+   + zarr file with standard devations of columns
+   + merged list of rsids to remove
+   This step needs to be rerun for different phenotypes if there are individuals with missing phenotypes that are removed.  
+
 
 ## Simulations
 Two types of simulations can be generated:
-1. Including a simulated genotype
-2. Using real genotype data
+a.) Including a simulated genotype
+b.) Using real genotype data (not inlcuding NaN values)
 
 #### a.) With simulated genotype
 The genotype matrix is simulated in the needed file format using **preprocessing_vcf_MC.py**. The corresponding phenotype is generated with **genY.py**.
 
-#### b.) With real genotype data
-The phenotype and effects are generated using **genY.py**.
 
-Steps 2 onwards are the same as for real data.
+#### b.) With real genotype data
+The phenotype and effects are generated using **genY.py**, assuming that there are no NaN values within the genotype data.
+
 
 ## Association studies
 It is possible to perform association studies with the framework. However, special care needs to be taken if the associations are tested for each genetic component individually. The model is set up so that markers are either included in the model for all genetic components or not included at all. Therefore, if a marker is included with a high posterior inclusion probability, one needs to check for each of the genetic components if the effect size +/- standard deviation includes 0. If 0 is covered by effect size +/- standard deviation, there is no association.
