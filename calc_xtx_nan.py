@@ -3,7 +3,7 @@
 
 Install dependencies:
 ```
-pip install numpy loguru scipy zarr dask
+pip install numpy loguru scipy zarr==2.17.2 dask
 ```
 python calc_xtx.py --n 10000 --p 100000 --k 4 --pheno pheno --xfile genotype.zarr/ --dir outputdir/ --rmid list_missingpheno.txt
 ```
@@ -14,9 +14,7 @@ python calc_xtx.py --n 10000 --p 100000 --k 4 --pheno pheno --xfile genotype.zar
 --dir path to output directory (required)
 --rmid list in txt format with line number of individual with missing phenotype (according to line in genotype file)
 --pheno name of phenotype for output filename
-ATTENTION: If there are columns with zero variation, the columns will also be deleted from the genotype matrix and the genotype matrix will be overwritten!
 """
-
 import sys
 import argparse
 import numpy as np
