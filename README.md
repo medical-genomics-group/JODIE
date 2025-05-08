@@ -124,7 +124,7 @@ Be aware that the number of genetic components is often hard-coded in the prepro
 #### Limitations for JODIE:
 + JODIE is set up that all input data needs to fit into RAM. 
 + NaN values within the genotype type can be taken into account with a slightly different setup. Code for nan value is denoted with *_nan*. There is an additional step to be run after step b:\
-  **get_mean_std_rmrsids.py**\
+  **get_mean_std_rmrsids_nan.py**\
    Calculating mean and standard deviations for each column, looping over all chromosome, and merging rmrsid files\
    Needed input:
    + genotype files created in step a
