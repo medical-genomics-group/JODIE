@@ -1,5 +1,5 @@
 # JODIE: Joint mOdel for Direct and Indirect Effects
-JODIE is a joint Bayesian method (Gibbs sampler) that is able to (i) estimate the unique contribution of different genetic components (here: direct, indirect parental and parent-of-origin genetic effects) to phenotypic variation; (ii) determine the covariances between the different effects; and (iii) find shared and distinct associations between the different genetic components, while allowing for sparsity and correlations within the genomic data. Additionally, code to perform a multiple one-marker-at-a-time genome-wide association study (family GWAS, fGWAS) to jointly estimate the regression coefficients for the allelic variation in the child, mother, father, and of parent-of-origin assignment is provided.
+JODIE is a joint Bayesian method (Gibbs sampler) that, for a single outcome, is able to (i) estimate the unique contribution of different genetic components (here: direct, indirect parental and parent-of-origin genetic effects) to phenotypic variation; (ii) determine the covariances between the different effects; and (iii) find shared and distinct associations between the different genetic components, while allowing for sparsity and correlations within the genomic data. Additionally, code to perform a multiple one-marker-at-a-time genome-wide association study (family GWAS, fGWAS) to jointly estimate the regression coefficients for the allelic variation in the child, mother, father, and of parent-of-origin assignment is provided.
 
 The code is written in python using MPI, and was tested with python/3.11.1 with openmpi/4.1.4 and python/3.12 with openmpi/4.1.6, run on a high performance computing cluster using slurm. Information about which input parameters a program requires and how to run it is also given in the first few lines of each program.
 The data preparation step of the code is based on phased and imputed child-mother-father trio data in vcf format from the pipeline described in _R. Hofmeister et.al. Nature Communications 13 (1), 6668_. 
@@ -35,7 +35,7 @@ The sequence of the programs is:
    Preprocessing vcf files with genotype information to have the data format required by the Gibbs sampler, separetely for each chromosome\
    Needed input:
    + vcf files with genotype information
-   + tab delimited files with id information for trios (and separately for duos if needed; missing parent will be inferred)
+   + tab delimited files with id information for trios with child id as first column (and separately for duos if needed; missing parent will be inferred)
      
    Output:
    + genotype file in zarr format with child, mother, father, parent-of-origin information for each marker
@@ -43,11 +43,23 @@ The sequence of the programs is:
      
    File structure for output is assumed to be outdir/chrX/ where X is the chromosome number.
 
-#### b.) calc_xtx.py
+#### b.) order_phenotype.py
+   Ordering the phenotypes of children accroding to index file (same order as genotype file)\
+   Needed input:
+   + tab-delimited phenotype file with ID, VAL
+   + tab delimited files with id information for trios with child id as first column (and separately for duos if needed)
+     
+   Output:
+   + ordered phenotype file
+   + list in txt format with line number of individual with missing phenotype (according to line in genotype file)
+     
+   This step needs to be run for every phenotype.
+   
+#### c.) calc_xtx.py
    Calculating the standardized genotype matrix squared, separately for each chromosome\
    Needed input:
    + genotype file created in step a
-   + list in txt format with line number of individual with missing phenotype (according to line in genotype file)
+   + list in txt format with line number of individual with missing phenotype (according to line in genotype file) created in step b
      
    Output:
    + standardized and squared matrix calculated for the different component of each marker in zarr format (XtX matrix)
@@ -55,14 +67,12 @@ The sequence of the programs is:
      
    This step needs to be rerun for different phenotypes if there are individuals with missing phenotypes that are removed.
 
-#### c.) order_phenotype.py
-
 #### d.) jodie.py
    Estimating parameters using a Gibbs sampler\
    Needed input is required to be able to fit into RAM:
    + genotype file created in step a
-   + XtX file created in step b
-   + phenotype file in txt format without header in the same order as the genotype matrix as created in step c
+   + XtX file created in step c
+   + phenotype file in txt format without header in the same order as the genotype matrix as created in step b
    + list in txt format with line number of individual with missing phenotype (according to line in genotype file) - these individuals will be removed from the analysis
      
    Output:
