@@ -77,8 +77,8 @@ The sequence of the programs is:
    + rmrsid file created in step c - these markers will be removed from the analysis
      
    Output:
-   + mean_betas.csv.zip: posterior mean of effects where columns correspond to the genetic components and rows to the markers
-   + var_betas.csv.zip: variance of effects
+   + mean_beta.csv.zip: posterior mean of effects where columns correspond to the genetic components and rows to the markers
+   + var_beta.csv.zip: variance of effects
    + mean_prob.txt: posterior inclusion probability for each marker (how often has the marker been included in the model); the marker is either included for all genetic components or not, thus only one column
    + var_prob.txt: variance of posterior inclusion probability
    + mean_sigma2.txt: posterior mean of residual variance
