@@ -134,12 +134,14 @@ Be aware that the number of genetic components is often hard-coded in the prepro
    + zarr file with means of columns
    + zarr file with standard devations of columns
    + merged list of rsids to remove
+     
    This step needs to be rerun for different phenotypes if there are individuals with missing phenotypes that are removed.  
 
 
 ## Simulations
 Two types of simulations can be generated:
-a.) Including a simulated genotype
+
+a.) Including a simulated genotype\
 b.) Using real genotype data (not inlcuding NaN values)
 
 #### a.) With simulated genotype
