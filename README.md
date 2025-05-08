@@ -51,7 +51,7 @@ The sequence of the programs is:
      
    Output:
    + ordered phenotype file
-   + list in txt format with line number of individual with missing phenotype (according to line in genotype file)
+   + rmid file with list of individuals with missing phenotype (according to line in genotype file)
      
    This step needs to be run for every phenotype.
    
@@ -59,7 +59,7 @@ The sequence of the programs is:
    Calculating the standardized genotype matrix squared, separately for each chromosome\
    Needed input:
    + genotype file created in step a
-   + list in txt format with line number of individual with missing phenotype (according to line in genotype file) created in step b
+   + rmid file created in step b
      
    Output:
    + standardized and squared matrix calculated for the different component of each marker in zarr format (XtX matrix)
@@ -72,8 +72,9 @@ The sequence of the programs is:
    Needed input is required to be able to fit into RAM:
    + genotype file created in step a
    + XtX file created in step c
-   + phenotype file in txt format without header in the same order as the genotype matrix as created in step b
-   + list in txt format with line number of individual with missing phenotype (according to line in genotype file) - these individuals will be removed from the analysis
+   + odered phenotype file created in step b
+   + rmid file created in step b - these individuals will be removed from the analysis
+   + rmrsid file created in step c - these markers will be removed from the analysis
      
    Output:
    + mean_betas.csv.zip: posterior mean of effects where columns correspond to the genetic components and rows to the markers
@@ -87,6 +88,7 @@ The sequence of the programs is:
    + trace_sigma2.txt: residual variance for each iteration (rows = iterations)
    + trace_V.txt: variance of effects for each iteration (rows = iterations), only variances are saved
    + trace_Z.txt: number of included markers for each iteration (rows = iterations)
+
    The posterior means are saved every 500 iterations (XX denotes the iteration). 
 
    During the burnin, the current estimate of every 500 iterations is saved to be able to restart the Gibbs sampler if necesseary. This includes:
@@ -106,13 +108,13 @@ The sequence of the programs is:
    + trace_V.png: (co)variances as function of iterations
    + trace_Z.png: number of included markers as function of iterations
 
-#### f.) fGWAS.py
+#### e.) fGWAS.py
 Estimating regression coefficients for one marker at a time using multiple regression.\
 This step is independent of jodie.py and can be run after step c.\
 Needed input:
    + genotype file in zarr format
    + rsid file in csv format with CHR, POS, RSID, REF, ALT information. Note: rsid file needs to be in the same directory as genotype zarr!
-   + ordered phenotype file\
+   + ordered phenotype file
 
 Output:
    + rsid file with regression coefficients and standard error for each marker and each component including intercept (coef1, stde1)
@@ -123,7 +125,7 @@ Output:
 --p number of markers
 --k number of genetic components
 --y path to phenotype file in txt format
---xfiles path to genotype files in zarr format; multiple files are separated by space
+--x path to genotype files in zarr format; multiple files are separated by space
 --dir path to output directory
 --g number of markers in each group if grouping is desired; otherwise g=p; this assumes that markers are ordered in groups in sequence (either g or gindex is needed as input parameter, not both)
 --gindex txt file with information about which group each marker belongs to in the same order as the markers in the genotype matrix (either g or gindex is needed as input parameter, not both)
