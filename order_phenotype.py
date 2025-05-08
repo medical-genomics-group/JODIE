@@ -16,6 +16,7 @@ python order_phenotype.py
 --index_duos  duos index file, same as for preparing_vcf_data.py; first column is child id 
 --outdir      name of output directory (required)
 --pheno       name of phenotype for output file (required)
+Phenotype file will first contain trios, then duos, ordered according to index.
 """
 import numpy as np
 import sys
