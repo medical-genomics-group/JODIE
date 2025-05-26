@@ -1,8 +1,21 @@
 # JODIE: Joint mOdel for Direct and Indirect Effects
+
+[Code](#code)
+
+[Simulations](#simulations)
+
+[Association studies](#association)
+
+[Inferring the genotype of a missing parent](#missparent)
+
 JODIE is a joint Bayesian method (Gibbs sampler) that, for a single outcome, is able to (i) estimate the unique contribution of different genetic components (here: direct, indirect parental and parent-of-origin genetic effects) to phenotypic variation; (ii) determine the covariances between the different effects; and (iii) find shared and distinct associations between the different genetic components, while allowing for sparsity and correlations within the genomic data. Additionally, code to perform a multiple one-marker-at-a-time genome-wide association study (family GWAS, fGWAS) to jointly estimate the regression coefficients for the allelic variation in the child, mother, father, and of parent-of-origin assignment is provided.
 
+<a name="code"/>
+
+### Code
 The code is written in python using MPI, and was tested with python/3.11.1 with openmpi/4.1.4 and python/3.12 with openmpi/4.1.6, run on a high performance computing cluster using slurm. Information about which input parameters a program requires and how to run it is also given in the first few lines of each program.
 The data preparation step of the code is based on phased and imputed child-mother-father trio data in vcf format from the pipeline described in _R. Hofmeister et.al. Nature Communications 13 (1), 6668_. 
+
 
 ### 1. Set up python environment
 
@@ -15,6 +28,8 @@ pip install -U pip
 pip install numpy scipy matplotlib loguru mpi4py welford zarr==2.17.2 dask pandas tqdm scikit-allel
 deactivate
 ```
+Typcial installation times are less than a minute.
+
 ### 2. Get code
 
 ```
@@ -149,6 +164,7 @@ Be aware that the number of genetic components is often hard-coded in the prepro
      
    This step needs to be rerun for different phenotypes if there are individuals with missing phenotypes that are removed.  
 
+<a name="simulations"/>
 
 ## Simulations
 Two types of simulations can be generated:
@@ -163,9 +179,15 @@ The genotype matrix is simulated in the needed file format using **preprocessing
 #### b.) With real genotype data
 The phenotype and effects are generated using **genY.py**, assuming that there are no NaN values within the genotype data.
 
+### Timing for simulated example
+Simulating a genotype with 20,000 markers for 5,000 indiviudals takes less than 20s; generating a phenotype for the genotype less than 10s; and calculating XtX less than 30s. Running JODIE without MPI for this example takes about 11s per iteration, while fGWAs takes less than 2 min. This was tested on an Apple MacBookPro.
+
+<a name="association"/>
 
 ## Association studies
 It is possible to perform association studies with the framework. However, special care needs to be taken if the associations are tested for each genetic component individually. The model is set up so that markers are either included in the model for all genetic components or not included at all. Therefore, if a marker is included with a high posterior inclusion probability, one needs to check for each of the genetic components if the effect size +/- standard deviation includes 0. If 0 is covered by effect size +/- standard deviation, there is no association.
+
+<a name="missparent"/>
 
 ## Inferring the genotype of a missing parent
 It is possible to infer the genotype of a missing parent in **preprocessing_vcf_data.py** using the information provided by trios and Bayes theorem. To do so, a list with the id information for duos needs to be provided additionally to the one of the trios.
