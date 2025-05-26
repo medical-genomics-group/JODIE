@@ -279,7 +279,7 @@ def main(n, p, na, n_trios, k, prob):
 
 ##########################
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Preprocessing.')
+    parser = argparse.ArgumentParser(description='Generating MC.')
     parser.add_argument('--n', type=int, help='number of individuals', required = True)
     parser.add_argument('--p', type=int, help='number of markers', required = True)
     parser.add_argument('--ntrios', type=int, help='number of trios', required=True)
