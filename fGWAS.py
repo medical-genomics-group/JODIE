@@ -4,16 +4,15 @@ Install dependencies:
 ```
 pip install numpy loguru pandas dask pathlib tqdm statsmodels zarr dask
 ```
-python linreg_1snp.py --indir --yfile --outdir --pstart --pend --k
+python fGWAS.py --indir indir/ --yfile phenotype.txt --outdir outputdir/ --pstart --pend --k
 --indir path to zarr directory without genotype.zarr
 --yfile  path to standardized phenotype file
 --k (default 4) k-1 is imprinting 
---outdir name should containg chr if X is split by chromosome
+--outdir name should contain chr if X is split by chromosome
 --pstart number of starting marker in file (if file needs to be split, default = 0) 
 --pend   number of ending marker in file (if file needs to be split, if file is read in as whole, pend = total number of markers in file)
 
 Note: rsids file needs to be in the same directory as genotype zarr
-MAF is not correct for nan values!
 """
 ## remove multithreading
 import os
@@ -76,8 +75,12 @@ def main(indir, yfile, outdir, k, pstart, pend, rmid):
     y = np.loadtxt(yfile)
 
     ## open rsid file
-    rsids = pd.read_csv(indir+"/rsids.csv", sep="\t")
-    rsids = rsids[pstart:pend]
+    if os.path.isfile(indir+"/rsids.csv"):
+        rsids = pd.read_csv(indir+"/rsids.csv", sep="\t")
+        rsids = rsids[pstart:pend]
+    else:
+        rsids = pd.DataFrame(data=[f"rsid{i}" for i in range(pstart,pend)])
+        logger.info("Generating rsids file.")
     ## add empty columns
     rsids['MAF'] = None
     mX = ['meanX'+str(i) for i in range(1,k+1)]
@@ -122,7 +125,7 @@ def main(indir, yfile, outdir, k, pstart, pend, rmid):
     # make sure output directory exists 
     pathlib.Path(outdir).mkdir(parents=True, exist_ok=True)
     ## save rsids, pos, chr in order of the markers occuring
-    rsids.to_csv(outdir+'/linreg'+str(pstart)+'-'+str(pend)+'.csv.zip', compression="zip", index=False, sep="\t")
+    rsids.to_csv(outdir+'/fGWAS_'+str(pstart)+'-'+str(pend)+'.csv.zip', compression="zip", index=False, sep="\t")
 
 ##########################
 if __name__ == "__main__":

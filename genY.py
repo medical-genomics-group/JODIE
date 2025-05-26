@@ -5,15 +5,15 @@ Install dependencies:
 ```
 pip install numpy loguru scipy zarr dask
 ```
-python genY.py --n 1000 --p 1000 --p0 9000 --dir outputdir/ --x genotype.zarr/ --rmid list_missingpheno.txt --scen 0
+python genY.py --n 5000 --p 20000 --p0 17500 --dir outputdir/ --x genotype.zarr/ --rmid list_missingpheno.txt --scen 0
 ````
 --n number of individuals (required)
---p number of markers (required)
+--p total number of markers (required)
 --p0 number of markers that are 0; causal markers = p - p0 (required)
 --dir path to directory where results are stored
 --x genotype matrix
 --rmid list in txt format with line number of individual with missing phenotype (according to line in genotype file)
---scen different scenarios for variance matrix of effects; 0=independent, 1=+0.5correlation, 2=-0.5correlation (required) 
+--scen different scenarios for variance matrix of effects; see paper for scenarios 0=V1, 1=V2, 2=V3, 3=V4, 4=V5 (required) 
 """
 
 import sys
@@ -56,21 +56,31 @@ def main(n, groups, groups0, k, dir, xfiles, scen, rmid):
     p = np.sum(groups)
     logger.info(f"Problem has dimensions {n=}, {p=}, {G=} with {groups0=} effects set to 0.")
 
-    var = np.array([[[0.125, 0, 0, 0],
-                    [0, 0.125, 0, 0],
-                    [0, 0, 0.125, 0],
-                    [0, 0, 0, 0.125]
+    var = np.array([[[0.5, 0, 0, 0],
+                    [0, 0., 0, 0],
+                    [0, 0, 0., 0],
+                    [0, 0, 0, 0.]
                     ],
-                    [[0.125, -0.5*np.sqrt(0.125)*np.sqrt(0.125), -0.5*np.sqrt(0.125)*np.sqrt(0.125), -0.5*np.sqrt(0.125)*np.sqrt(0.125)],
-                    [-0.5*np.sqrt(0.125)*np.sqrt(0.125), 0.125, -0.5*np.sqrt(0.125)*np.sqrt(0.125), -0.5*np.sqrt(0.125)*np.sqrt(0.125)],
-                    [-0.5*np.sqrt(0.125)*np.sqrt(0.125), -0.5*np.sqrt(0.125)*np.sqrt(0.125), 0.125, -0.5*np.sqrt(0.125)*np.sqrt(0.125)],
-                    [-0.5*np.sqrt(0.125)*np.sqrt(0.125), -0.5*np.sqrt(0.125)*np.sqrt(0.125), -0.5*np.sqrt(0.125)*np.sqrt(0.125), 0.125]
+                    [[0.4, 0, 0, 0],
+                    [0, 0., 0, 0],
+                    [0, 0, 0., 0],
+                    [0, 0, 0, 0.1]
                     ],
-                    [[0.125, 0.5*np.sqrt(0.125)*np.sqrt(0.125), 0.5*np.sqrt(0.125)*np.sqrt(0.125), 0.5*np.sqrt(0.125)*np.sqrt(0.125)],
-                    [0.5*np.sqrt(0.125)*np.sqrt(0.125), 0.125, 0.5*np.sqrt(0.125)*np.sqrt(0.125), 0.5*np.sqrt(0.125)*np.sqrt(0.125)],
-                    [0.5*np.sqrt(0.125)*np.sqrt(0.125), 0.5*np.sqrt(0.125)*np.sqrt(0.125), 0.125, 0.5*np.sqrt(0.125)*np.sqrt(0.125)],
-                    [0.5*np.sqrt(0.125)*np.sqrt(0.125), 0.5*np.sqrt(0.125)*np.sqrt(0.125), 0.5*np.sqrt(0.125)*np.sqrt(0.125), 0.125]
+                    [[0.3, 0, 0, 0],
+                    [0, 0.1, 0, 0],
+                    [0, 0, 0.1, 0],
+                    [0, 0, 0, 0.]
                     ],
+                    [[0.2, 0, 0, 0],
+                    [0, 0.1, 0, 0],
+                    [0, 0, 0.1, 0],
+                    [0, 0, 0, 0.1]
+                    ],
+                    [[0.15, 0.05, 0.05, -0.02],
+                    [0.05, 0.07, 0.05, -0.02],
+                    [0.05, 0.05, 0.07, -0.02],
+                    [-0.02, -0.02, -0.02, 0.07]
+                    ]
                     ])
 
     for g in range(G):
