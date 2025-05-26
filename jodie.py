@@ -9,7 +9,8 @@ execute with mpi with n processes:
 mpiexec -n 4 python -m mpi4py jodie.py 
 --n 10000 --p 20000 --k 4 --g 20000 
 --iters 500 --burnin 100 
---x genotype.zarr/ --y phenotype.txt --resultdir results/
+--x genotype.zarr/ --xtx xtx.zarr/
+--y phenotype.txt --resultdir results/
 --rmid  list_missingpheno.txt
 ````
 Options:
