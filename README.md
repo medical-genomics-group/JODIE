@@ -29,6 +29,7 @@ pip install numpy scipy matplotlib loguru mpi4py welford zarr==2.17.2 dask panda
 deactivate
 ```
 Typcial installation times are less than a minute.
+Note that the current setup needs zarr version 2. There are some incompatibilies between zarr version 2 and 3.
 
 ### 2. Get code
 
