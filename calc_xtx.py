@@ -5,7 +5,7 @@ Install dependencies:
 ```
 pip install numpy loguru scipy zarr==2.17.2 dask
 ```
-python calc_xtx.py --n 10000 --p 100000 --k 4 --pheno pheno --x genotype.zarr/ --dir outputdir/ --rmid list_missingpheno.txt
+python calc_xtx.py --n 5000 --p 20000 --k 4 --pheno pheno --x genotype.zarr/ --dir outputdir/ --rmid list_missingpheno.txt
 ```
 --n number of individuals (required)
 --p number of markers (required)
