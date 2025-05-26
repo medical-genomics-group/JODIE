@@ -6,8 +6,8 @@ Install dependencies:
 pip install numpy loguru scipy tqdm mpi4py welford matplotlib zarr dask pandas
 ```
 execute with mpi with n processes:
-mpiexec -n 4 python -m mpi4py parental_gibbs_samper.py 
---n 10000 --p 20000 -k 4 --g 10000 10000 
+mpiexec -n 4 python -m mpi4py jodie.py 
+--n 10000 --p 20000 --k 4 --g 20000 
 --iters 500 --burnin 100 
 --x genotype.zarr/ --y phenotype.txt --resultdir results/
 --rmid  list_missingpheno.txt
