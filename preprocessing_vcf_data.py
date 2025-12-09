@@ -16,6 +16,8 @@ python preprocessing_vcf_data.py
 --index_duos tab delimited file with id information for duos, incl. nan values for the missing parent
 --dir path to output directory where zarr files are stored (required)
 --only_trios process only trios, by default false
+
+First parent in index and vcf file is called mother, second is called father.
 """
 import sys
 import argparse
@@ -25,6 +27,7 @@ import allel
 import zarr
 import pandas as pd
 from tqdm import trange
+import pathlib
 
 def main(inputfiles, index_trios, index_duos, only_trios, dir, k):
 
@@ -65,7 +68,7 @@ def main(inputfiles, index_trios, index_duos, only_trios, dir, k):
 
     # read in indices
     if only_trios:
-        idfile = (pd.read_csv(index_trios, delimiter="\t", header = None)).values
+        idfile = (pd.read_csv(index_trios, delimiter="\t", header = None)).values.astype(str)
         n = idfile.shape[0]
         n_trios = n
     else: 
@@ -79,8 +82,8 @@ def main(inputfiles, index_trios, index_duos, only_trios, dir, k):
         n_trios = len(idfile_trios)
         n = n_trios + len(idfile_duos)
         ## cocatenate idfiles and remove headers
-        idfile = np.concatenate([(idfile_trios.values), (idfile_duos.values)], axis=0) 
-    logger.info(f"Processing {n=} individuals wiht {n_trios=} trios.")
+        idfile = np.concatenate([(idfile_trios.values), (idfile_duos.values)], axis=0).astype(str) 
+    logger.info(f"Processing {n=} individuals with {n_trios=} trios.")
     logger.info(f"{idfile=}")
     ### container for indices
     id = -np.ones((n,k-1), dtype='int')
@@ -91,7 +94,7 @@ def main(inputfiles, index_trios, index_duos, only_trios, dir, k):
         logger.info(f"{l=}")
         #read in vcf file
         # 1st dim  = variants, 2nd dim = samples
-        callset = allel.read_vcf(l, fields=['calldata/GT', 'samples', 'variants/AF'])
+        callset = allel.read_vcf(l, fields=['calldata/GT', 'samples', 'variants/AF', 'variants/CHROM', 'variants/POS', 'variants/ID', 'variants/ALT', 'variants/REF',])
         logger.info(f"{callset['samples']=}")
         af = callset['variants/AF'][:,0]
         #logger.info(f"{af=}")
@@ -112,6 +115,9 @@ def main(inputfiles, index_trios, index_duos, only_trios, dir, k):
         logger.info(f"{gt=}")
         p = gt.n_variants
         logger.info(f"{n=}, {p=}, {n_trios=}")
+        ## get rsid and id information
+        rsids = np.concatenate([callset['variants/CHROM'].reshape(p,1), callset['variants/POS'].reshape(p,1), callset['variants/ID'].reshape(p,1)], axis=1)
+        rsids = np.concatenate([rsids, callset['variants/REF'].reshape(p,1), callset['variants/ALT'][:,0].reshape(p,1)], axis=1)
 
         ## combine 2 alleles to 0,1,2
         xa = gt[:,:,0] + gt[:,:,1]
@@ -128,19 +134,14 @@ def main(inputfiles, index_trios, index_duos, only_trios, dir, k):
         for i in range(k-1):
             x[i::k] = xa[:,id[:,i]]
         # add parent of origin information
-        # add parent of origin information
         xpoo = np.zeros((p, n), dtype='int8')
         ## 1 if minor allele is coming from the mother
         ## return two arrays with indices for dim1 and dim2
         wm = np.where((np.equal(gt[:,id[:,0],0],1) & np.equal(gt[:,id[:,0],1],0)))
-        #logger.info(f"{wm=}")
         xpoo[wm[0], wm[1]] = 1
-        #logger.info(f"{np.where(xpoo==1)=}")
         ## -1 if minor allele is coming from the father
         wf = np.where((np.equal(gt[:,id[:,0],0],0) & np.equal(gt[:,id[:,0],1],1)))
         xpoo[wf[0], wf[1]] = -1
-        #logger.info(f"{wf=}")
-        #logger.info(f"{np.where(xpoo==-1)=}")
         x[(k-1)::k] = xpoo
         logger.info(f"{x=}")
 
@@ -163,6 +164,13 @@ def main(inputfiles, index_trios, index_duos, only_trios, dir, k):
             x = np.delete(x, lid, axis=0)
             logger.info(f"{x.shape=}")
         logger.info(f"{np.unique(x)=}")
+        #save rsids
+        rsids = pd.DataFrame(rsids, columns=['CHROM', 'POS', 'ID', 'REF', 'ALT'])
+        logger.info(f"{rsids=}")
+        # make sure output directory exists 
+        pathlib.Path(dir).mkdir(parents=True, exist_ok=True)
+        ## save rsids, pos, chr in order of the markers occuring
+        rsids.to_csv(dir+'/rsids.csv', index=None, sep="\t")
        
         ## impute missing data for duos
         ## loop through markers
@@ -220,16 +228,12 @@ def main(inputfiles, index_trios, index_duos, only_trios, dir, k):
                     
                     ## homozygotes need to be split according to parent of origin information
                     if (combinations[i]==np.array([1,1])).all() and (len(duos_id_m) > 0 or len(duos_id_f) > 0):
-                        # if minor allele from mother == 1, poo = x[rj+3]== 1 
-                        # if minor allele from father == 1, poo = x[rj+3] == -1
+                        # if minor allele from mother == 1, poo == 1 
+                        # if minor allele from father == 1, poo == -1
                         duos_id_m0 = np.argwhere((np.array([1,-1])==x[rj+2:rj+4].T).all(axis=1))     # duos where Xf = 1, POO = -1 (Xm=0), mother NA
                         duos_id_m1 = np.argwhere((np.array([1,1])==x[rj+2:rj+4].T).all(axis=1))      # duos where Xf = 1, POO = +1 (Xm=2), mother NA
                         duos_id_f0 = np.argwhere((np.array([1,1])==x[rj+1:rj+4:2].T).all(axis=1))    # duos where Xm = 1, POO = +1 (Xf=0), father NA
                         duos_id_f1 = np.argwhere((np.array([1,-1])==x[rj+1:rj+4:2].T).all(axis=1))   # duos where Xm = 1, POO = -1 (Xf=2), father NA
-                        #duos_id_m0 = duos_id_m[np.argwhere((x[rj+3,duos_id_m]==-1).all(axis=1))]    # 1 came from father (Xm=0)
-                        #duos_id_m1 = duos_id_m[np.argwhere((x[rj+3,duos_id_m]==1).all(axis=1))]     # 1 came from mother (Xm=2)
-                        #duos_id_f0 = duos_id_f[np.argwhere((x[rj+3,duos_id_f]==1).all(axis=1))]     # 1 came from mother (Xf=0)
-                        #duos_id_f1 = duos_id_f[np.argwhere((x[rj+3,duos_id_f]==-1).all(axis=1))]    # 1 came from father (Xf=2)
                         
                         # calulate prior probabilities B
                         # from number of occurences divided by all number of available duos (=number of available mothers or fathers)
@@ -238,10 +242,10 @@ def main(inputfiles, index_trios, index_duos, only_trios, dir, k):
                         ppB_f0 = len(duos_id_f0)/nm # occurences of child+mother / total number of child+mother duos; split by POO
                         ppB_f1 = len(duos_id_f1)/nm
                         #logger.info(f"{combinations[i]=}, {ppB_m0=}, {ppB_m1=}, {ppB_f0=}, {ppB_f1=}")
-                        logger.info(f"{j=}, {len(duos_id_m)=}, {len(duos_id_m0)=}, {len(duos_id_m1)=}")
-                        logger.info(f"{j=}, {len(duos_id_f)=}, {len(duos_id_f0)=}, {len(duos_id_f1)=}")
-                        logger.info(f"{np.unique(x[rj,duos_id_m1], return_counts=True)=}, {np.unique(x[rj,duos_id_m0], return_counts=True)=}")
-                        logger.info(f"{np.unique(x[rj,duos_id_f1], return_counts=True)=}, {np.unique(x[rj,duos_id_f0], return_counts=True)=}")
+                        #logger.info(f"{j=}, {len(duos_id_m)=}, {len(duos_id_m0)=}, {len(duos_id_m1)=}")
+                        #logger.info(f"{j=}, {len(duos_id_f)=}, {len(duos_id_f0)=}, {len(duos_id_f1)=}")
+                        #logger.info(f"{np.unique(x[rj,duos_id_m1], return_counts=True)=}, {np.unique(x[rj,duos_id_m0], return_counts=True)=}")
+                        #logger.info(f"{np.unique(x[rj,duos_id_f1], return_counts=True)=}, {np.unique(x[rj,duos_id_f0], return_counts=True)=}")
 
                         # calculate likelihood from trios; split by POO
                         Lm0 = 0 if cm_trios[trios_mother[i,1]]==0 else len(np.argwhere((trios_mother[i]==x[rj:rj+3,:n_trios].T).all(axis=1)))/cm_trios[trios_mother[i,1]]
@@ -252,11 +256,6 @@ def main(inputfiles, index_trios, index_duos, only_trios, dir, k):
                         # for each combination there are two possibilities
                         # calculate posterior probability for one possibility, then the other one has prob. 1-p
                         # posterior = priorA * likelihood / priorB
-                        #pm0 = ppA[trios_mother[i,1]]*Lm0/ppB_m0
-                        #pm1 = ppA[trios_mother[i+1,1]]*Lm1/ppB_m1
-                        #pf0 = ppA[trios_father[i,2]]*Lf0/ppB_f0
-                        #pf1 = ppA[trios_father[i+1,2]]*Lf1/ppB_f1
-                        #logger.info(f"{pm0=}, {pm1=}, {pf0=}, {pf1=}")
 
                         # determine how many NA values need to be replaced
                         id_na_m0 = np.argwhere((np.array([1, 9, 1, -1])==x[rj:rj+4].T).all(axis=1)) # 1, 9, 1, -1 (Xm = 0)
@@ -314,19 +313,16 @@ def main(inputfiles, index_trios, index_duos, only_trios, dir, k):
                         # from number of occurences divided by all number of available duos (=number of available mothers or fathers)
                         ppB_m = len(duos_id_m)/nf    # occurences of child+father / total number of child+father duos
                         ppB_f = len(duos_id_f)/nm    # occurences of child+mother / total number of child+mother duos
-                        #logger.info(f"{combinations[i]=}, {ppB_m=}, {ppB_f=}")
 
                         # calculate likelihood from trios
                         Lm = 0 if cm_trios[trios_mother[i,1]]==0 else len(np.argwhere((trios_mother[i]==x[rj:rj+3,:n_trios].T).all(axis=1)))/cm_trios[trios_mother[i,1]]
                         Lf = 0 if cf_trios[trios_father[i,2]]==0 else len(np.argwhere((trios_father[i]==x[rj:rj+3,:n_trios].T).all(axis=1)))/cf_trios[trios_father[i,2]]
-                        #logger.info(f"{Lm=}, {Lf=}")
 
                         # for each combination there are two possibilities
                         # calculate posterior probability for one possibility, then the other one has prob. 1-p
                         # posterior = priorA * likelihood / priorB
                         pm = ppA[trios_mother[i,1]]*Lm/ppB_m
                         pf = ppA[trios_father[i,2]]*Lf/ppB_f
-                        #logger.info(f"{j=}, {af[j]=}, {pm=}, {pf=}")
 
                         # draw from binomial distribution according to posterior probability
                         # add shift for those values where the possiblities are 1 and 2
