@@ -6,38 +6,39 @@ Install dependencies:
 pip install numpy loguru scipy tqdm mpi4py welford matplotlib zarr dask pandas
 ```
 execute with mpi with n processes:
-mpiexec -n 4 python -m mpi4py jodie.py 
---n 5000 --p 20000 --k 4 --g 20000 
---iters 1000 --burnin 500 
---x genotype.zarr/ --xtx xtx.zarr/
---y phenotype.txt --resultdir results/
+mpiexec -n 4 python -m mpi4py jodie_nan.py 
+--n 10000 --p 20000 -k 4 --g 10000 10000 
+--iters 500 --burnin 100 
+--x genotype.zarr/ --y phenotype.txt --resultdir results/
 --rmid  list_missingpheno.txt
-
-without mpi:
-python jodie.py 
---n 5000 --p 20000 --k 4 --g 20000 
---iters 1000 --burnin 500 
---x genotype.zarr/ --xtx xtx.zarr/
---y phenotype.txt --resultdir results/
---rmid  list_missingpheno.txt
+--mfile file with means of each column
+--sfile file with std. deviations of each column
 ````
 Options:
 --n number of individuals (required)
 --p number of markers (required)
 --k number of genetic components (k=2,3,4); default=4
---xfile genotype file created in preprocessing_vcf_data.py (required)
+--x genotype file created in preprocessing_vcf_data.py (required)
 --xtx squared genotype file created in calc_xtx.py (required)
+--mfile file with mean of each column created in get_mean_std_rmid.py (required)
+--sfile file with standard devation of each column created in get_mean_std_rmid.py (required)
 --y phenotype file in txt format without header with individuals ordered in the same way as in the xfiles
 --resultdir path to output directory (required) 
---rmid list in txt format with line number of individual with missing phenotype (according to line in genotype file)
+--rmid list in txt format with line number of individual with missing phenotype (according to line in genotype file) created in get_mean_std_rmid.py
 --iters number of total iterations for the Gibbs sampler; default = 10,000
---burnin number of iterations in the burnin; default 1,000)
+--burnin number of iterations in the burnin; default 1,000
 --g number of markers in each group; this assumes that markers are ordered in groups in sequence (either g or gindex is needed as input parameter, not both)
 --gindex txt file with information about which group each marker belongs to in the same order as the markers in the genotype matrix (either g or gindex is needed as input parameter, not both)
 --itc counter for updating residuals (after number of processes times itc markers); default = 2 (if set too high, the Gibbs sampler will diverge)
 --restart default = False; Gibbs sampler can be restarted using results saved at it 1000; 
 CAUTION: files for restarting are taken from resultdir, but new results will be overwrite old results in resultdir
 """
+'''
+Adjustments for NANs:
+xdata: 9 represents NAN.
+nan values are replaced with mean before standardization.
+mean and std. dev. are read in.
+'''
 import os
 os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["MKL_NUM_THREADS"] = "1"
@@ -102,8 +103,8 @@ def sample_V(beta, L, D, k, Z, a, b, s):
     # sample covariances according to
     # https://doi.org/10.1198/jcgs.2009.08095
     beta_2 = np.matmul(beta.T, beta)
-    ## all zero groups or if total beta variance below 0.1%
-    if np.sum(np.diag(beta_2)) <= 0.001 or Z==0:
+    ## all zero groups or if total beta variance below 0.00001%
+    if np.sum(np.diag(beta_2)) <= 0.000001 or Z==0:
         V = np.zeros((k,k))
         Vinv = 10e+09*np.eye(k)
         L = np.eye(k)
@@ -115,9 +116,16 @@ def sample_V(beta, L, D, k, Z, a, b, s):
 
         for i in range(k):
             #sample elements of D
-            D[i] = stats.invgamma.rvs(a= a/2 + Z, 
-                scale=a*b/2 + ww[i, i]
-                )
+            if Z > 5:
+                D[i] = stats.invgamma.rvs(a= a/2 + Z,
+                    scale=a*b/2 + ww[i, i]
+                    )
+            # for small Z values, use different a and b
+            ## changed
+            else:
+                D[i] = stats.invgamma.rvs(a=1/2+Z,
+                                          scale=0.0001/2+ww[i,i]
+                                          )
             #sample elements of L
             if i >= 1:
                 si = np.linalg.inv((1 / D[i]) * beta_2[0:i, 0:i] + s*np.eye(i))
@@ -134,7 +142,7 @@ def sample_invGamma(a, b, a1, b1):
     return stats.invgamma.rvs(a + a1, scale=(b + b1))
 
 
-def main(n, p, k, groups, gindex, iters, burnin, xfiles, xtxfiles, yfile, itc, resultdir, rmid, restart):
+def main(n, p, k, groups, gindex, iters, burnin, xfiles, xtxfiles, yfile, itc, resultdir, rmid, rmrsid, restart, mfile, sfile):
 
     ## groups
     if gindex:
@@ -145,7 +153,7 @@ def main(n, p, k, groups, gindex, iters, burnin, xfiles, xtxfiles, yfile, itc, r
     elif len(groups) > 0:
         G = len(groups)
         group_idx = np.repeat(np.arange(G), groups)
-        logger.info(f"{np.sum(groups)=}")
+        #logger.info(f"{np.sum(groups)=}")
         assert p == np.sum(groups)
     else:
         logger.info("Neither g nor gindex has been defined. One of them is needed for processing data.")
@@ -154,13 +162,6 @@ def main(n, p, k, groups, gindex, iters, burnin, xfiles, xtxfiles, yfile, itc, r
     comm = MPI.COMM_WORLD
     worldSize = comm.Get_size()
     rank = comm.Get_rank()
-    # size of data blocks
-    p_split = int(p/worldSize)
-    if p_split * worldSize < p:
-        p_split += 1
-    if rank==0:
-        logger.info(f"Data is split in {worldSize} * {p_split} columns.")
-
     # open genotype files via lazy loading
     for i in range(len(xfiles)):
         z = zarr.open(xfiles[i], mode='r')
@@ -169,24 +170,70 @@ def main(n, p, k, groups, gindex, iters, burnin, xfiles, xtxfiles, yfile, itc, r
         else:
             xdata = da.append(xdata,z, axis=1)
     xdata = xdata.astype('int8')
-    logger.info(f"{xdata=}")
-    # add columns of 0 for even split
-    if p_split*worldSize-p > 0:
-        az = da.zeros((xdata.shape[0], (p_split*worldSize-p)*k), dtype = 'int8')
-        if rank == 0:
-            logger.info(f"Added {p_split*worldSize-p} columns of zeros to x.")
-        xdata = da.concatenate([xdata, az], axis=1)
-        group_idx = np.append(group_idx, np.ones((p_split*worldSize-p))*G)
-        group_idx = group_idx.astype(int)
-        if rank==0:
-            logger.info(f"{group_idx.shape=}")
-            logger.info(f"{G=}, {group_idx=}")
+    #if rank==0:
+    #    logger.info(f"{xdata=}")
+   
     ## delete rows where phenotype is na
     if rmid is not None:
         lines = list(np.loadtxt(rmid, delimiter=",").astype('int'))
         lines = [l for l in lines if l < n]
         xdata = np.delete(xdata, lines, axis=0) 
         n -= len(lines)
+        if rank==0:
+            logger.info(f"new {n=}")
+
+    ## open mean and std file
+    zm = zarr.open(mfile, mode='r')
+    mean = da.from_zarr(zm)
+    zs = zarr.open(sfile, mode='r')
+    std = da.from_zarr(zs)
+    if rank==0:
+        logger.info(f"{mean.shape=}, {std.shape=}")
+    ## delete rsids from X, mean and std
+    if rmrsid is not None:
+        lines = np.loadtxt(rmrsid, delimiter=",").astype('int')
+        lines = lines[lines < p*k]
+        #if rank==0:
+        #    logger.info(f"{lines=}")
+        xdata = np.delete(xdata, lines, axis=1) 
+        #if rank==0:
+        #    logger.info(f"{xdata=}")
+        mean = np.delete(mean, lines, axis=0)
+        std = np.delete(std, lines, axis=0)
+        # remove from group index - lines is for all genetic components
+        lines1 = lines[0::k]
+        #if rank==0:
+        #    logger.info(f"{lines1=}")
+        lines1 //= k
+        #if rank==0:
+        #    logger.info(f"{lines1=}")
+        group_idx = np.delete(group_idx, lines1)
+        if rank==0:
+            #logger.info(f"{group_idx=}")
+            logger.info(f"after deleting lines: {mean.shape=}, {std.shape=}")
+        p -= len(lines)//k
+        if rank==0:
+            logger.info(f"new {p=}")
+
+     # size of data blocks
+    p_split = int(p/worldSize)
+    if p_split * worldSize < p:
+        p_split += 1
+    if rank==0:
+        logger.info(f"Data is split in {worldSize} * {p_split} columns.")
+        
+        # add columns of 0 for even split
+    if p_split*worldSize-p > 0:
+        az = da.zeros((n, (p_split*worldSize-p)*k), dtype = 'int8')
+        if rank == 0:
+            logger.info(f"Added {p_split*worldSize-p} columns of zeros to x.")
+        xdata = da.concatenate([xdata, az], axis=1)
+        group_idx = np.append(group_idx, np.ones((p_split*worldSize-p))*G)
+        group_idx = group_idx.astype(int)
+        #if rank==0:
+        #    logger.info(f"{group_idx.shape=}")
+        #    logger.info(f"{G=}, {group_idx=}")
+  
     ## split data for each process
     X_split = xdata[:,rank*k*p_split:(rank+1)*k*p_split].compute()
     ## open xtx files
@@ -197,8 +244,13 @@ def main(n, p, k, groups, gindex, iters, burnin, xfiles, xtxfiles, yfile, itc, r
             xtxdata = da.from_zarr(zxtx)
         else:
             xtxdata = np.append(xtxdata, zxtx, axis=0)
+    #logger.info(f"{xtxdata=}")
     xtxdata = xtxdata.astype('float32')
     XtX = xtxdata[rank*k*p_split:(rank+1)*k*p_split].compute()
+    ## split mean and std for each process
+    mean = mean[rank*k*p_split:(rank+1)*k*p_split].compute()
+    std = std[rank*k*p_split:(rank+1)*k*p_split].compute()
+    #logger.info(f"{np.unique(std)}")
 
     if rank==0:
         logger.info(f"Problem has dimensions {n=}, {p=}, {k=}, {G=}.")
@@ -329,8 +381,15 @@ def main(n, p, k, groups, gindex, iters, burnin, xfiles, xtxfiles, yfile, itc, r
             else:     
                 #get group index
                 g = group_idx[gj]
+                # replace 9 with mean
+                X = X_split[:, j*k:k*(j+1)]
+                X = np.where(np.equal(X,9), mean[j*k:k*(j+1)], X)
+                #X = np.where(np.equal(X,9), np.nan , X)
+                #X = np.nan_to_num(X,0)
                 # standardize X
-                X = (X_split[:, j*k:k*(j+1)] - np.nanmean(X_split[:, j*k:k*(j+1)], axis=0))/np.nanstd(X_split[:, j*k:k*(j+1)], ddof=1, axis=0)
+                X = (X - mean[j*k:k*(j+1)])/std[j*k:k*(j+1)]
+                #X = (X_split[:, j*k:k*(j+1)] - np.nanmean(X_split[:, j*k:k*(j+1)], axis=0))/np.nanstd(X_split[:, j*k:k*(j+1)], ddof=1, axis=0)
+                #X = np.where(np.isnan(X), np.nanmean(X_split[:, j*k:k*(j+1)]), X)
                 # calculate X.T@epsilon
                 #xe = np.matmul(X.T, epsilon)
                 xe = blas.dgemv(1.0, X, epsilon, trans=1)
@@ -548,8 +607,11 @@ if __name__ == "__main__":
     parser.add_argument('--x', type=str, nargs='+', help='list of genotype matrix filenames (zarr files)', required = True)
     parser.add_argument('--xtx', type=str, nargs='+', help='list of xtx files (zarr files)', required = True)
     parser.add_argument('--y', type=str, help='phenotype matrix filename (txt file)', required = True)
+    parser.add_argument('--mfile', type=str, help='zarr file with means', required = True)
+    parser.add_argument('--sfile', type=str, help='zarr file with std. devs.', required = True)
     parser.add_argument('--resultdir', type=str, help='path to directory where the results are stored', required = True)
     parser.add_argument('--rmid', type=str, help='list of ids to delete (default is None)')
+    parser.add_argument('--rmrsid', type=str, help='list of rsids to delete (default is None)')
     parser.add_argument('--restart', type=bool, default=False, help='restart with burnin values (default=False)')
     args = parser.parse_args()
     logger.info(args)
@@ -576,6 +638,9 @@ if __name__ == "__main__":
         yfile = args.y, # phenotype file
         resultdir = args.resultdir, # path to results directory
         rmid = args.rmid, # rows to remove from genotype
+        rmrsid = args.rmrsid, # columns to remove from genotype
         restart = args.restart, #boolean for restart
+        mfile = args.mfile,
+        sfile = args.sfile,
         ) 
     logger.info("Done.")

@@ -6,13 +6,14 @@ Install dependencies:
 ```
 pip install numpy loguru tqdm zarr
 ```
-python preprocessing_vcf_MC.py --n 5000 --p 20000 --ntrios 5000 --na 0 --maf 0.2
+python preprocessing_vcf_MC.py --n 5000 --p 20000 --ntrios 5000 --na 0 --maf 0.2 --dir outdir
 ````
 --n number of individuals (required)
 --p number of markers (required)
 --ntrios number of trios (required)
 --na number of not genotyped mothers, fathers are calculated as n - na - ntrios; set to 0 if only trios should be generated; missing parent will be inferred
 --maf minor allele frequency used for all markers; default = 0.2
+--dir output directory
 """
 import sys
 import argparse
@@ -45,9 +46,10 @@ def gen_data(n, p, prob, rng):
     X[:,2*n:,1] = xf_a2.T
     return X
 
-def main(n, p, na, n_trios, k, prob):
+def main(n, p, na, n_trios, k, prob, dir):
 
-    missing = True if na > 0 else False
+    logger.info(f"{zarr.__version__=}")
+    missing = True if n_trios!=n else False
 
     ## possible genetic combinations of child/mother/father
     combinations = np.array([[0,0], [0,1], [1,0], [1,2], [2,1], [2,2], [1,1]])
@@ -82,10 +84,12 @@ def main(n, p, na, n_trios, k, prob):
     # generate data
     gt = gen_data(n, p, prob, rng)
     id = np.arange(3*n).reshape(n, 3, order='F')
-    logger.info(f"{id=}")
+    #logger.info(f"{id=}")
     xa = gt[:,:,0] + gt[:,:,1]
-    logger.info(f"{xa=}")
-    logger.info(f"{n=}, {p=}, {n_trios=}")
+    #logger.info(f"{xa=}")
+    n_duos_m=na
+    n_duos_f=n-n_trios-na
+    logger.info(f"{n=}, {p=}, {n_trios=}, {n_duos_m=}, {n_duos_f=}")
 
     # add line with nans to be able to indicate missing data
     a = np.ones((p,1)) * 9
@@ -99,23 +103,25 @@ def main(n, p, na, n_trios, k, prob):
     ## 1 if minor allele is coming from the mother
     ## return two arrays with indices for dim1 and dim2
     wm = np.where((np.equal(gt[:,id[:,0],0],1) & np.equal(gt[:,id[:,0],1],0)))
-    #logger.info(f"{wm=}")
     xpoo[wm[0], wm[1]] = 1
     ## -1 if minor allele is coming from the father
     wf = np.where((np.equal(gt[:,id[:,0],0],0) & np.equal(gt[:,id[:,0],1],1)))
     xpoo[wf[0], wf[1]] = -1
     x[(k-1)::k] = xpoo
-    logger.info(f"{x=}")
-    z = zarr.array(x.T, chunks=(None,1000))
+    #logger.info(f"{x=}")
+    z = zarr.create_array(store=f'{dir}/genotype.zarr', shape=x.T.shape, chunks=(n, 1000), dtype='int8')
+    z[:] = x.T
+    #z = zarr.array(x.T, chunks=(None,1000)) ##zarr2
     logger.info(f"{z.info=}")
-    zarr.save('genotype.zarr', z)
+    #zarr.save('genotype.zarr', z) ## zarr2
 
     # simulate missing data
     if missing:
         x[1::k, n_trios:n_trios+na] = 9
         x[2::k, n_trios+na:n] = 9
-        logger.info(f"{x.T=}")
+        #logger.info(f"{x.T=}")
 
+        logger.info(f"Imputing duos")
         # loop through markers
         for j in trange(p, desc="Main loop"):
 
@@ -204,7 +210,7 @@ def main(n, p, na, n_trios, k, prob):
                     if nm_na0 > 0:
                         pm0 = ppA[trios_mother[i,1]]*Lm0/ppB_m0
                         if pm0 > 1:
-                            logger.info(f"reset pm0 to 1: {j=}, {ppA=}, {ppB_m0=}, {Lm0=}, {pm0=}")
+                            #logger.info(f"reset pm0 to 1: {j=}, {ppA=}, {ppB_m0=}, {Lm0=}, {pm0=}")
                             pm0 = 1
                         mother = rng.binomial(1, pm0, size= nm_na0)
                         x[rj+1, id_na_m0] = mother.reshape(nm_na0,1)+shift[i]
@@ -214,14 +220,14 @@ def main(n, p, na, n_trios, k, prob):
                         # 1-pm1 gives probabiltiy of getting Xm = 1
                         # use 1-pm1 to make it consistent the other combinations
                         if pm1 > 1:
-                            logger.info(f"reset pm1 to 1: {j=}, {ppA=}, {ppB_m1=}, {Lm1=}, {pm1=}")
+                            #logger.info(f"reset pm1 to 1: {j=}, {ppA=}, {ppB_m1=}, {Lm1=}, {pm1=}")
                             pm1 = 1
                         mother = rng.binomial(1, (1-pm1), size= nm_na1)
                         x[rj+1, id_na_m1] = mother.reshape(nm_na1,1)+shift[i+1]
                     if nf_na0 > 0:
                         pf0 = ppA[trios_father[i,2]]*Lf0/ppB_f0
                         if pf0 > 1:
-                            logger.info(f"reset pf0 to 1: {j=}, {ppA=}, {ppB_f0=}, {Lf0=}, {pf0=}")
+                            #logger.info(f"reset pf0 to 1: {j=}, {ppA=}, {ppB_f0=}, {Lf0=}, {pf0=}")
                             pf0 = 1
                         father = rng.binomial(1, pf0, size= nf_na0)+shift[i]
                         x[rj+2, id_na_f0] = father.reshape(nf_na0,1)
@@ -232,7 +238,7 @@ def main(n, p, na, n_trios, k, prob):
                         # 1-pf1 gives probabiltiy of getting Xf = 1
                         # use 1-pf1 to make it consistent the other combinations
                         if pf1 > 1:
-                            logger.info(f"reset pf1 to 1: {j=}, {ppA=}, {ppB_f1=}, {Lf1=}, {pf1=}")
+                            #logger.info(f"reset pf1 to 1: {j=}, {ppA=}, {ppB_f1=}, {Lf1=}, {pf1=}")
                             pf1 = 1
                         father = rng.binomial(1, (1-pf1), size= nf_na1)+shift[i+1]
                         x[rj+2, id_na_f1] = father.reshape(nf_na1,1)
@@ -260,21 +266,22 @@ def main(n, p, na, n_trios, k, prob):
                     # add shift for those values where the possiblities are 1 and 2
                     if nm_na > 0:
                         if pm > 1:
-                            logger.info(f"reset pm to 1: {j=}, {ppA=}, {ppB_m=}, {Lm=}, {pm=}")
+                            #logger.info(f"reset pm to 1: {j=}, {ppA=}, {ppB_m=}, {Lm=}, {pm=}")
                             pm = 1
                         mother = rng.binomial(1, pm, size= nm_na)
                         x[rj+1, id_na_m] = mother.reshape(nm_na,1)+shift[i]
                     if nf_na > 0:
                         if pf > 1:
-                            logger.info(f"reset pf to 1: {j=}, {ppA=}, {ppB_f=}, {Lf=}, {pf=}")
+                            #logger.info(f"reset pf to 1: {j=}, {ppA=}, {ppB_f=}, {Lf=}, {pf=}")
                             pf = 1
                         father = rng.binomial(1, pf, size= nf_na)+shift[i]
                         x[rj+2, id_na_f] = father.reshape(nf_na,1)
-                        
-        z = zarr.array(x.T, chunks=(None,1000))
+        
+        z = zarr.create_array(store=f'{dir}/genotype_imputed.zarr', shape=x.T.shape, chunks=(n, 1000), dtype='int8')
+        z[:] = x.T                
+        #z = zarr.array(x.T, chunks=(None,1000)) ##zarr2
         logger.info(f"{z.info=}")
-        zarr.save('genotype_imputed.zarr', z)
-        #np.savez_compressed('genotype_imputed.npz', x.T)
+        #zarr.save('genotype_imputed.zarr', z) ##zarr2
 
 
 ##########################
@@ -285,6 +292,7 @@ if __name__ == "__main__":
     parser.add_argument('--ntrios', type=int, help='number of trios', required=True)
     parser.add_argument('--na', type=int, help='number of not genotyped mothers, fathers are calculated as n - na - ntrios', required=True)
     parser.add_argument('--maf', type=float, default = 0.2, help='minor allele frequency (default=0.2)')
+    parser.add_argument('--dir', type=str, help='path to output directory', required=True)
     args = parser.parse_args()
     logger.info(args)
 
@@ -304,5 +312,6 @@ if __name__ == "__main__":
         na = args.na, 
         k = 4, # number of genetic components
         prob = args.maf,
+        dir = args.dir,
         ) 
     logger.info("Done.")

@@ -3,9 +3,9 @@
 
 Install dependencies:
 ```
-pip install numpy loguru scipy zarr==2.17.2 dask
+pip install numpy loguru scipy zarr dask
 ```
-python calc_xtx.py --n 5000 --p 20000 --k 4 --pheno pheno --x genotype.zarr/ --dir outputdir/ --rmid list_missingpheno.txt
+python calc_xtx.py --n 10000 --p 100000 --k 4 --pheno pheno --xfile genotype.zarr/ --dir outputdir/ --rmid list_missingpheno.txt
 ```
 --n number of individuals (required)
 --p number of markers (required)
@@ -15,7 +15,6 @@ python calc_xtx.py --n 5000 --p 20000 --k 4 --pheno pheno --x genotype.zarr/ --d
 --rmid list in txt format with line number of individual with missing phenotype (according to line in genotype file)
 --pheno name of phenotype for output filename
 """
-
 import sys
 import argparse
 import numpy as np
@@ -27,55 +26,61 @@ import dask.array as da
 
 def main(n, p, k, xfile, dir, rmid, pheno):
 
+    # open zarr file
     z = zarr.open(xfile, mode='r')
     xdata = da.from_zarr(z)
     X = xdata.compute()
     X = X.astype('float')
-    logger.info(f"{np.unique(np.nanstd(X, axis=0))=}")
-    logger.info(f"{np.unique(np.nanmean(X, axis=0))=}")
     ## delete rows where phenotype is na
     if rmid is not None:
         lines = list(np.loadtxt(rmid, delimiter=",").astype('int'))
         lines = [l for l in lines if l < n]
         X = np.delete(X, lines, axis=0)
         n = len(X)
-    ## check for possible nan columns due to removed lines
-    logger.info(f"{np.unique(np.nanstd(X, axis=0))=}")
-    logger.info(f"{np.unique(np.nanmean(X, axis=0))=}")
+        logger.info(f"After removing individuals without phenotype: {n=}")
+    # replace 9 with nans to compute mean and std
+    X = np.where(np.equal(X,9), np.nan, X)
+    ## check for columns with no variance due to removed lines
+    #logger.info(f"{np.unique(np.nanstd(X, axis=0))=}")
+    #logger.info(f"{np.unique(np.nanmean(X, axis=0))=}")
     sd = np.nanstd(X, ddof=1, axis=0)
     did= []
     for i in range(0,k):
         did = np.append(did, np.array(np.where(sd[i::k]==0)).reshape(-1))
     did = np.unique(did)
+    ## if there are columns with no variance, remove makers (i.e k columns per marker)
     lid = []
     if len(did) > 0:
-        logger.info(f"{X.shape=}")
+        logger.info(f"Before removing columns: {X.shape=}")
         for i in range(len(did)):
             lid = np.append(lid, np.arange(did[i]*k, k*(did[i]+1)))
         lid = lid.astype(int)
-        logger.info(f"{lid=}")
+        #logger.info(f"{lid=}")
         X = np.delete(X, lid, axis=1)
-        logger.info(f"{X.shape=}")
+        logger.info(f"After removing columns: {X.shape=}")
         p -= len(did)
     logger.info(f"{p=}")
+    # replace nans with mean to calculate xtx
+    mean = np.nanmean(X, axis=0)
+    X = np.where(np.isnan(X), mean, X)
     XtX = np.zeros((p*k,k))
     logger.info(f"{XtX.shape=}")
     for j in range(p):
         X[:, j*k:k*(j+1)] = stats.zscore(X[:, j*k:k*(j+1)], axis=0, ddof=1)
         XtX[j*k:k*(j+1),:] = np.matmul(X[:,j*k:k*(j+1)].T, X[:,j*k:k*(j+1)])
-    logger.info(f"{XtX=}")
-    zxtx = zarr.array(XtX, chunks=(1000,None))
+    # logger.info(f"CHECK IF NANS ARE IN XTX: {np.unique(XtX)=}")
+    # save xtx
+    zxtx = zarr.create_array(store=f'{dir}/XtX_'+pheno+'.zarr', shape=XtX.shape, chunks=(10000,k), dtype='float')
+    zxtx[:] = XtX
+    #zxtx = zarr.array(XtX, chunks=(1000,None)) ## zarr2
     logger.info(f"{zxtx.info=}")
-    zarr.save(dir+'/XtX_'+pheno+'.zarr', zxtx)
+    #zarr.save(dir+'/XtX_'+pheno+'.zarr', zxtx) ## zarr2
+    
+    # save index of removed columns
     if len(did) > 0:
         logger.info(f"{lid=}")
-        np.savetxt(dir+"/rmrsid.txt", lid, delimiter=",", fmt="%i")
-        #X = xdata.compute()
-        #X = np.delete(X, lid, axis=1)
-        #z = zarr.array(X, chunks=(None,1000))
-        #logger.info(f"{z.info=}")
-        #zarr.save(dir+'/genotype.zarr', z)
-
+        np.savetxt(f"{dir}/rmrsid_{pheno}.txt", lid, delimiter=",", fmt="%i")
+    
 
 ##########################
 if __name__ == "__main__":

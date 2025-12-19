@@ -5,11 +5,11 @@ Install dependencies:
 ```
 pip install numpy loguru scipy zarr dask
 ```
-python genY.py --n 5000 --p 20000 --p0 17500 --dir outputdir/ --x genotype.zarr/ --rmid list_missingpheno.txt --scen 0
+python genY.py --n 5000 --p 20000 --pc 1000 --dir outputdir/ --x genotype.zarr/ --rmid list_missingpheno.txt --scen 0
 ````
 --n number of individuals (required)
 --p total number of markers (required)
---p0 number of markers that are 0; causal markers = p - p0 (required)
+--pc number of causal markers (required)
 --dir path to directory where results are stored
 --x genotype matrix
 --rmid list in txt format with line number of individual with missing phenotype (according to line in genotype file)
@@ -25,9 +25,11 @@ import zarr
 import dask.array as da
 
 
-def main(n, groups, groups0, k, dir, xfiles, scen, rmid):
+def main(n, groups, groups1, k, dir, xfiles, scen, rmid):
 
     G = len(groups)
+    # calculate number of zero effects
+    groups0 = groups-groups1
     # random generator
     rng = np.random.default_rng()
     # read in genotype matrix
@@ -85,13 +87,11 @@ def main(n, groups, groups0, k, dir, xfiles, scen, rmid):
 
     for g in range(G):
         logger.info(f"{g=}, {scen=}, {var[scen]=}")
-        # calculate number of non-zero effects
-        p1 = (groups[g]-groups0[g])
         # generate beta
-        if p1 == 0:
+        if groups1[g] == 0:
             beta = np.zeros((groups0[g], k))
         else:
-            beta = np.concatenate([rng.multivariate_normal(np.zeros(k), var[scen]/p1, p1), np.zeros((groups0[g], k))])
+            beta = np.concatenate([rng.multivariate_normal(np.zeros(k), var[scen]/groups1[g], groups1[g]), np.zeros((groups0[g], k))])
         rng.shuffle(beta)
         V = np.matmul(beta.T, beta)
         if g == 0:
@@ -103,18 +103,18 @@ def main(n, groups, groups0, k, dir, xfiles, scen, rmid):
 
     #logger.info(f"{true_beta.shape=}")        
     logger.info(f"{true_V=}")
-    logger.info(f"{np.cov(beta, rowvar=False)=}")
-    logger.info(f"{np.matmul(beta.flatten().T, beta.flatten())=}")
-    logger.info(f"{np.var(Xnorm@true_beta.flatten())=}")
+    #logger.info(f"{np.cov(beta, rowvar=False)=}")
+    #logger.info(f"{np.matmul(beta.flatten().T, beta.flatten())=}")
+    #logger.info(f"{np.var(Xnorm@true_beta.flatten())=}")
     g = Xnorm@true_beta.flatten()
 
     # generate epsilon
     std = np.sqrt(1-np.var(g))
-    logger.info(f"{std=}")
+    #logger.info(f"{std=}")
 
     epsilon = np.random.normal(0, std, n)
     true_sigma2 = np.var(epsilon)
-    logger.info(f"{true_sigma2=}")
+    #logger.info(f"{true_sigma2=}")
     logger.info(f"{np.std(epsilon)=}")
     # generate Y
     Y = g + epsilon
@@ -135,7 +135,7 @@ if __name__ == "__main__":
     parser.add_argument('--n', type=int, help='number of individuals', required = True)
     parser.add_argument('--k', type=int, default=4, help='number of family member incl. POO (2,3 or 4; default=4)')
     parser.add_argument('--p', nargs='+', type=int, help='number of markers in each group, sums up to total number of markers', required = True)
-    parser.add_argument('--p0', nargs='+', type=int, help='number of markers set to 0 in each group', required = True)
+    parser.add_argument('--pc', nargs='+', type=int, help='number of causal markers in each group', required = True)
     parser.add_argument('--dir', type=str, help='path to directory where the results are stored', required = True)
     parser.add_argument('--x', type=str, nargs='+', help='list of genotype matrix filenames (zarr files)', required = True)
     parser.add_argument('--rmid', type=str, help='list of ids to delete (default is None)')
@@ -155,7 +155,7 @@ if __name__ == "__main__":
     main(n = args.n, # number of individuals
         k = args.k, # number of genetic components
         groups = np.array(args.p),  # number of markers
-        groups0 = np.array(args.p0),  # number of zero markers
+        groups1 = np.array(args.pc),  # number of zero markers
         dir = args.dir, # path to results directory
         xfiles = args.x, # genotype matrix file
         rmid = args.rmid,
