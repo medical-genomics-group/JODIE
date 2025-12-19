@@ -31,7 +31,7 @@ pip install numpy scipy matplotlib loguru mpi4py welford zarr dask pandas tqdm s
 deactivate
 ```
 Typcial installation times are less than a minute.
-Note that the current setup needs zarr version 3. If you are using zarr version2, switch to branch zarr2.
+Note that the current setup needs zarr version 3. If you are using zarr version2, switch to tag zarr2.
 
 ### 2. Get code
 
