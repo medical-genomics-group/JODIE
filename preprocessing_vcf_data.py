@@ -13,7 +13,7 @@ python preprocessing_vcf_data.py
 --only_trios True
 ````
 --index_trios tab delimited file with id information for trios (required)
---index_duos tab delimited file with id information for duos, incl. nan values for the missing parent
+--index_duos tab delimited file with id information for duos, incl. nan values for the missing parent (not needed if only trios are processed)
 --dir path to output directory where zarr files are stored (required)
 --only_trios process only trios, by default false
 
@@ -31,6 +31,7 @@ import pathlib
 
 def main(inputfiles, index_trios, index_duos, only_trios, dir, k):
 
+    logger.info(f"{zarr.__version__=}")
     ## possible genetic combinations of child/mother/father
     combinations = np.array([[0,0], [0,1], [1,0], [1,2], [2,1], [2,2], [1,1]])
     # trios for imputation of mother; father available
@@ -76,28 +77,25 @@ def main(inputfiles, index_trios, index_duos, only_trios, dir, k):
         idfile_duos = pd.read_csv(index_duos, delimiter="\t", header = None, keep_default_na=False)
         #replace NA values with NAN to avoid confusion with individuals' id
         idfile_duos[idfile_duos=='NA']='NAN'
-        logger.info(f"{idfile_trios=}")
-        logger.info(f"{idfile_duos=}")
+        #logger.info(f"{idfile_trios=}")
+        #logger.info(f"{idfile_duos=}")
         # get number of individuals and markers
         n_trios = len(idfile_trios)
         n = n_trios + len(idfile_duos)
         ## cocatenate idfiles and remove headers
-        idfile = np.concatenate([(idfile_trios.values), (idfile_duos.values)], axis=0).astype(str) 
+        idfile = np.concatenate([(idfile_trios.values), (idfile_duos.values)], axis=0).astype(str)
     logger.info(f"Processing {n=} individuals with {n_trios=} trios.")
-    logger.info(f"{idfile=}")
+    #logger.info(f"{idfile=}")
     ### container for indices
     id = -np.ones((n,k-1), dtype='int')
 
     ##loop over multiple input files
     for l in inputfiles:
-
         logger.info(f"{l=}")
         #read in vcf file
         # 1st dim  = variants, 2nd dim = samples
         callset = allel.read_vcf(l, fields=['calldata/GT', 'samples', 'variants/AF', 'variants/CHROM', 'variants/POS', 'variants/ID', 'variants/ALT', 'variants/REF',])
-        logger.info(f"{callset['samples']=}")
         af = callset['variants/AF'][:,0]
-        #logger.info(f"{af=}")
         ## get indices only once after first file has loaded
         if l == inputfiles[0]:
             ## add a NAN value to sample ids so that NA have last index
@@ -107,13 +105,14 @@ def main(inputfiles, index_trios, index_duos, only_trios, dir, k):
                 samples = np.concatenate([callset['samples'], np.array(['NAN'])])
             sorter = np.argsort(samples)
             logger.info(f"{samples.shape=}")
-            logger.info(f"{sorter=}")
+            #logger.info(f"{sorter=}")
             id = sorter[np.searchsorted(samples, idfile, sorter=sorter)]
-        logger.info(f"{id=}")
+        #logger.info(f"{id=}")
         ## get genotype data as genotype array (2 alleles)
         gt = allel.GenotypeArray(callset['calldata/GT'])
-        logger.info(f"{gt=}")
         p = gt.n_variants
+        ## replace -1 which represents missing values with nans
+        gt = np.where(np.equal(gt, -1), np.nan, gt)
         logger.info(f"{n=}, {p=}, {n_trios=}")
         ## get rsid and id information
         rsids = np.concatenate([callset['variants/CHROM'].reshape(p,1), callset['variants/POS'].reshape(p,1), callset['variants/ID'].reshape(p,1)], axis=1)
@@ -121,11 +120,10 @@ def main(inputfiles, index_trios, index_duos, only_trios, dir, k):
 
         ## combine 2 alleles to 0,1,2
         xa = gt[:,:,0] + gt[:,:,1]
-        logger.info(f"{np.unique(xa)=}")
-        logger.info(f"{xa=}")
-        ## replace NAN indexed with -1 or -2 with 9
-        xa = np.where(np.equal(xa, -1), 9, xa)
-        xa = np.where(np.equal(xa, -2), 9, xa)
+        #logger.info(f"{np.unique(xa, return_counts = True)=}")
+        ## replace NAN with 9
+        xa = np.where(np.isnan(xa), 9, xa)
+        #logger.info(f"{np.unique(xa, return_counts = True)=}")
         # add line with nans to be able to indicate missing data
         a = np.ones((p,1)) * 9
         xa = np.concatenate((xa,a), axis=1)
@@ -143,30 +141,31 @@ def main(inputfiles, index_trios, index_duos, only_trios, dir, k):
         wf = np.where((np.equal(gt[:,id[:,0],0],0) & np.equal(gt[:,id[:,0],1],1)))
         xpoo[wf[0], wf[1]] = -1
         x[(k-1)::k] = xpoo
-        logger.info(f"{x=}")
-
+        #logger.info(f"{x=}")
         ## remove markers depending on trio data only
         sd = np.nanstd(x[:, 0:n_trios], axis=1)
-        logger.info(f"{np.unique(sd)=}")
-        did = []
+        #logger.info(f"{np.unique(sd)=}")
+        did=[]
         for i in range(0,k):
             did = np.append(did, np.array(np.where(sd[i::k]==0)).reshape(-1))
-            did = np.append(did, np.array(np.where(np.isnan(sd[i::k]))).reshape(-1))
-        did = np.unique(did)
-        logger.info(f"{did=}")
+        did = np.unique(did).astype(int)
+        logger.info(f"columns to remove: {did}")
         if len(did) > 0:
-            logger.info(f"{x.shape=}")
+            rsids = np.delete(rsids, did, axis=0)
+            logger.info(f"before removing colums: {x.shape=}")
             lid = []
             for i in range(len(did)):
                 lid = np.append(lid, np.arange(did[i]*k, k*(did[i]+1)))
             lid = lid.astype(int)
-            logger.info(f"{lid=}")
+            #logger.info(f"{lid=}")
             x = np.delete(x, lid, axis=0)
-            logger.info(f"{x.shape=}")
+            logger.info(f"after removing columns: {x.shape=}")
         logger.info(f"{np.unique(x)=}")
+        if 9 in np.unique(x):
+            logger.info(f"Dataset contains nans!")
         #save rsids
         rsids = pd.DataFrame(rsids, columns=['CHROM', 'POS', 'ID', 'REF', 'ALT'])
-        logger.info(f"{rsids=}")
+        #logger.info(f"{rsids=}")
         # make sure output directory exists 
         pathlib.Path(dir).mkdir(parents=True, exist_ok=True)
         ## save rsids, pos, chr in order of the markers occuring
@@ -228,8 +227,8 @@ def main(inputfiles, index_trios, index_duos, only_trios, dir, k):
                     
                     ## homozygotes need to be split according to parent of origin information
                     if (combinations[i]==np.array([1,1])).all() and (len(duos_id_m) > 0 or len(duos_id_f) > 0):
-                        # if minor allele from mother == 1, poo == 1 
-                        # if minor allele from father == 1, poo == -1
+                        # if minor allele from mother == 1, poo = x[rj+3]== 1 
+                        # if minor allele from father == 1, poo = x[rj+3] == -1
                         duos_id_m0 = np.argwhere((np.array([1,-1])==x[rj+2:rj+4].T).all(axis=1))     # duos where Xf = 1, POO = -1 (Xm=0), mother NA
                         duos_id_m1 = np.argwhere((np.array([1,1])==x[rj+2:rj+4].T).all(axis=1))      # duos where Xf = 1, POO = +1 (Xm=2), mother NA
                         duos_id_f0 = np.argwhere((np.array([1,1])==x[rj+1:rj+4:2].T).all(axis=1))    # duos where Xm = 1, POO = +1 (Xf=0), father NA
@@ -241,12 +240,7 @@ def main(inputfiles, index_trios, index_duos, only_trios, dir, k):
                         ppB_m1 = len(duos_id_m1)/nf
                         ppB_f0 = len(duos_id_f0)/nm # occurences of child+mother / total number of child+mother duos; split by POO
                         ppB_f1 = len(duos_id_f1)/nm
-                        #logger.info(f"{combinations[i]=}, {ppB_m0=}, {ppB_m1=}, {ppB_f0=}, {ppB_f1=}")
-                        #logger.info(f"{j=}, {len(duos_id_m)=}, {len(duos_id_m0)=}, {len(duos_id_m1)=}")
-                        #logger.info(f"{j=}, {len(duos_id_f)=}, {len(duos_id_f0)=}, {len(duos_id_f1)=}")
-                        #logger.info(f"{np.unique(x[rj,duos_id_m1], return_counts=True)=}, {np.unique(x[rj,duos_id_m0], return_counts=True)=}")
-                        #logger.info(f"{np.unique(x[rj,duos_id_f1], return_counts=True)=}, {np.unique(x[rj,duos_id_f0], return_counts=True)=}")
-
+                        
                         # calculate likelihood from trios; split by POO
                         Lm0 = 0 if cm_trios[trios_mother[i,1]]==0 else len(np.argwhere((trios_mother[i]==x[rj:rj+3,:n_trios].T).all(axis=1)))/cm_trios[trios_mother[i,1]]
                         Lm1 = 0 if cm_trios[trios_mother[i+1,1]]==0 else len(np.argwhere((trios_mother[i+1]==x[rj:rj+3,:n_trios].T).all(axis=1)))/cm_trios[trios_mother[i+1,1]]
@@ -256,7 +250,6 @@ def main(inputfiles, index_trios, index_duos, only_trios, dir, k):
                         # for each combination there are two possibilities
                         # calculate posterior probability for one possibility, then the other one has prob. 1-p
                         # posterior = priorA * likelihood / priorB
-
                         # determine how many NA values need to be replaced
                         id_na_m0 = np.argwhere((np.array([1, 9, 1, -1])==x[rj:rj+4].T).all(axis=1)) # 1, 9, 1, -1 (Xm = 0)
                         id_na_m1 = np.argwhere((np.array([1, 9, 1, +1])==x[rj:rj+4].T).all(axis=1)) # 1, 9, 1, +1 (Xm = 2) 
@@ -272,7 +265,7 @@ def main(inputfiles, index_trios, index_duos, only_trios, dir, k):
                             pm0 = ppA[trios_mother[i,1]]*Lm0/ppB_m0
                             #logger.info(f"{j=}, {af[j]=}, {ppA=}, {ppB_m0=}, {Lm0=}, {pm0=}")
                             if pm0 > 1:
-                                logger.info(f"reset pm0 to 1: {j=}, {af[j]=}, {ppA=}, {ppB_m0=}, {Lm0=}, {pm0=}")
+                                #logger.info(f"reset pm0 to 1: {j=}, {af[j]=}, {ppA=}, {ppB_m0=}, {Lm0=}, {pm0=}")
                                 pm0 = 1
                             mother = rng.binomial(1, pm0, size= nm_na0)
                             x[rj+1, id_na_m0] = mother.reshape(nm_na0,1)+shift[i]
@@ -283,7 +276,7 @@ def main(inputfiles, index_trios, index_duos, only_trios, dir, k):
                             # 1-pm1 gives probabiltiy of getting Xm = 1
                             # use 1-pm1 to make it consistent the other combinations
                             if pm1 > 1:
-                                logger.info(f"reset pm1 to 1: {j=}, {af[j]=}, {ppA=}, {ppB_m1=}, {Lm1=}, {pm1=}")
+                                #logger.info(f"reset pm1 to 1: {j=}, {af[j]=}, {ppA=}, {ppB_m1=}, {Lm1=}, {pm1=}")
                                 pm1 = 1
                             mother = rng.binomial(1, (1-pm1), size= nm_na1)
                             x[rj+1, id_na_m1] = mother.reshape(nm_na1,1)+shift[i+1]
@@ -291,7 +284,7 @@ def main(inputfiles, index_trios, index_duos, only_trios, dir, k):
                             pf0 = ppA[trios_father[i,2]]*Lf0/ppB_f0
                             #logger.info(f"{j=}, {af[j]=}, {ppA=}, {ppB_f0=}, {Lf0=}, {pf0=}")
                             if pf0 > 1:
-                                logger.info(f"reset pf0 to 1: {j=}, {af[j]=}, {ppA=}, {ppB_f0=}, {Lf0=}, {pf0=}")
+                                #logger.info(f"reset pf0 to 1: {j=}, {af[j]=}, {ppA=}, {ppB_f0=}, {Lf0=}, {pf0=}")
                                 pf0 = 1
                             father = rng.binomial(1, pf0, size= nf_na0)+shift[i]
                             x[rj+2, id_na_f0] = father.reshape(nf_na0,1)
@@ -302,7 +295,7 @@ def main(inputfiles, index_trios, index_duos, only_trios, dir, k):
                             # 1-pf1 gives probabiltiy of getting Xf = 1
                             # use 1-pf1 to make it consistent the other combinations
                             if pf1 > 1:
-                                logger.info(f"reset pf1 to 1: {j=}, {af[j]=}, {ppA=}, {ppB_f1=}, {Lf1=}, {pf1=}")
+                                #logger.info(f"reset pf1 to 1: {j=}, {af[j]=}, {ppA=}, {ppB_f1=}, {Lf1=}, {pf1=}")
                                 pf1 = 1
                             father = rng.binomial(1, (1-pf1), size= nf_na1)+shift[i+1]
                             x[rj+2, id_na_f1] = father.reshape(nf_na1,1)
@@ -313,40 +306,44 @@ def main(inputfiles, index_trios, index_duos, only_trios, dir, k):
                         # from number of occurences divided by all number of available duos (=number of available mothers or fathers)
                         ppB_m = len(duos_id_m)/nf    # occurences of child+father / total number of child+father duos
                         ppB_f = len(duos_id_f)/nm    # occurences of child+mother / total number of child+mother duos
+                        #logger.info(f"{combinations[i]=}, {ppB_m=}, {ppB_f=}")
 
                         # calculate likelihood from trios
                         Lm = 0 if cm_trios[trios_mother[i,1]]==0 else len(np.argwhere((trios_mother[i]==x[rj:rj+3,:n_trios].T).all(axis=1)))/cm_trios[trios_mother[i,1]]
                         Lf = 0 if cf_trios[trios_father[i,2]]==0 else len(np.argwhere((trios_father[i]==x[rj:rj+3,:n_trios].T).all(axis=1)))/cf_trios[trios_father[i,2]]
+                        #logger.info(f"{Lm=}, {Lf=}")
 
                         # for each combination there are two possibilities
                         # calculate posterior probability for one possibility, then the other one has prob. 1-p
                         # posterior = priorA * likelihood / priorB
                         pm = ppA[trios_mother[i,1]]*Lm/ppB_m
                         pf = ppA[trios_father[i,2]]*Lf/ppB_f
+                        #logger.info(f"{j=}, {af[j]=}, {pm=}, {pf=}")
 
                         # draw from binomial distribution according to posterior probability
                         # add shift for those values where the possiblities are 1 and 2
                         if nm_na > 0:
                             if pm > 1:
-                                logger.info(f"reset pm to 1: {j=}, {af[j]=}, {ppA=}, {ppB_m=}, {Lm=}, {pm=}")
+                                #logger.info(f"reset pm to 1: {j=}, {af[j]=}, {ppA=}, {ppB_m=}, {Lm=}, {pm=}")
                                 pm = 1
                             mother = rng.binomial(1, pm, size= nm_na)
                             x[rj+1, id_na_m] = mother.reshape(nm_na,1)+shift[i]
                         if nf_na > 0:
                             if pf > 1:
-                                logger.info(f"reset pf to 1: {j=}, {af[j]=}, {ppA=}, {ppB_f=}, {Lf=}, {pf=}")
+                                #logger.info(f"reset pf to 1: {j=}, {af[j]=}, {ppA=}, {ppB_f=}, {Lf=}, {pf=}")
                                 pf = 1
                             father = rng.binomial(1, pf, size= nf_na)+shift[i]
                             x[rj+2, id_na_f] = father.reshape(nf_na,1)
 
-
         if l == inputfiles[0]:
-            z = zarr.array(x.T, chunks=(None,1000))
+            z = zarr.create_array(store=f'{dir}/genotype.zarr', shape=x.T.shape, chunks=(n, 1000), dtype='int8')
+            z[:] = x.T
+            #z = zarr.array(x.T, chunks=(None,1000)) ## zarr2
         else:
             z.append(x.T, axis=1)
 
     logger.info(f"{z.info=}")
-    zarr.save(dir+'/genotype.zarr', z)
+    #zarr.save(dir+'/genotype.zarr', z) ## zarr2
 
 
 ##########################
