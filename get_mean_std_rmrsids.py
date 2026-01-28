@@ -75,14 +75,18 @@ def main(indir, outdir, nchr, rmid, pheno):
             rsids = np.append(rsids, id)
     
     # save mean and std as zarr
-    zarr.save(outdir+"/mean.zarr", mean)
-    zarr.save(outdir+"/std.zarr", std)
-    #zm = zarr.array(mean) ## zarr2
-    #logger.info(f"{zm=}")
-    #zarr.save(outdir+"/mean.zarr", zm) ## zarr2
-    #zs = zarr.array(std) ## zarr2
-    #logger.info(f"{zs=}")
-    #zarr.save(outdir+"/std.zarr", zs) ## zarr2
+    if zarr.__version__.startswith('3'):
+        logger.info(f"zarr 3")
+        zarr.save(outdir+"/mean.zarr", mean)
+        zarr.save(outdir+"/std.zarr", std)
+    elif zarr.__version__.startswith('2'):
+        logger.info(f"zarr 2")
+        zm = zarr.array(mean) ## zarr2
+        logger.info(f"{zm=}")
+        zarr.save(outdir+"/mean.zarr", zm) ## zarr2
+        zs = zarr.array(std) ## zarr2
+        logger.info(f"{zs=}")
+        zarr.save(outdir+"/std.zarr", zs) ## zarr2
 
     # save rsids
     logger.info(f"{rsids=}")

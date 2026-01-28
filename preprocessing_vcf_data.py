@@ -336,14 +336,19 @@ def main(inputfiles, index_trios, index_duos, only_trios, dir, k):
                             x[rj+2, id_na_f] = father.reshape(nf_na,1)
 
         if l == inputfiles[0]:
-            z = zarr.create_array(store=f'{dir}/genotype.zarr', shape=x.T.shape, chunks=(n, 1000), dtype='int8')
-            z[:] = x.T
-            #z = zarr.array(x.T, chunks=(None,1000)) ## zarr2
+            if zarr.__version__.startswith('3'):
+                logger.info(f"zarr 3")
+                z = zarr.create_array(store=f'{dir}/genotype.zarr', shape=x.T.shape, chunks=(n, 1000), dtype='int8')
+                z[:] = x.T
+            elif zarr.__version__.startswith('2'):
+                logger.info(f"zarr 2")
+                z = zarr.array(x.T, chunks=(None,1000)) ## zarr2
         else:
             z.append(x.T, axis=1)
 
     logger.info(f"{z.info=}")
-    #zarr.save(dir+'/genotype.zarr', z) ## zarr2
+    if zarr.__version__.startswith('2'):
+        zarr.save(dir+'/genotype.zarr', z) ## zarr2
 
 
 ##########################
