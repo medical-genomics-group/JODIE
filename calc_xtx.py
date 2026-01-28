@@ -70,11 +70,15 @@ def main(n, p, k, xfile, dir, rmid, pheno):
         XtX[j*k:k*(j+1),:] = np.matmul(X[:,j*k:k*(j+1)].T, X[:,j*k:k*(j+1)])
     # logger.info(f"CHECK IF NANS ARE IN XTX: {np.unique(XtX)=}")
     # save xtx
-    zxtx = zarr.create_array(store=f'{dir}/XtX_'+pheno+'.zarr', shape=XtX.shape, chunks=(10000,k), dtype='float')
-    zxtx[:] = XtX
-    #zxtx = zarr.array(XtX, chunks=(1000,None)) ## zarr2
+    if zarr.__version__.startswith('3'):
+        logger.info("zarr 3")
+        zxtx = zarr.create_array(store=f'{dir}/XtX_'+pheno+'.zarr', shape=XtX.shape, chunks=(10000,k), dtype='float')
+        zxtx[:] = XtX
+    elif zarr.__version__.startswith('2'):
+        logger.info("zarr 2")
+        zxtx = zarr.array(XtX, chunks=(1000,None)) ## zarr2
+        zarr.save(dir+'/XtX_'+pheno+'.zarr', zxtx) ## zarr2
     logger.info(f"{zxtx.info=}")
-    #zarr.save(dir+'/XtX_'+pheno+'.zarr', zxtx) ## zarr2
     
     # save index of removed columns
     if len(did) > 0:

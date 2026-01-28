@@ -109,11 +109,15 @@ def main(n, p, na, n_trios, k, prob, dir):
     xpoo[wf[0], wf[1]] = -1
     x[(k-1)::k] = xpoo
     #logger.info(f"{x=}")
-    z = zarr.create_array(store=f'{dir}/genotype.zarr', shape=x.T.shape, chunks=(n, 1000), dtype='int8')
-    z[:] = x.T
-    #z = zarr.array(x.T, chunks=(None,1000)) ##zarr2
+    if zarr.__version__.startswith('3'):
+        logger.info(f"zarr 3")
+        z = zarr.create_array(store=f'{dir}/genotype.zarr', shape=x.T.shape, chunks=(n, 1000), dtype='int8')
+        z[:] = x.T
+    elif zarr.__version__.startswith('2'):
+        logger.info(f"zarr 2")
+        z = zarr.array(x.T, chunks=(None,1000)) ##zarr2
+        zarr.save('genotype.zarr', z) ## zarr2
     logger.info(f"{z.info=}")
-    #zarr.save('genotype.zarr', z) ## zarr2
 
     # simulate missing data
     if missing:
@@ -277,12 +281,15 @@ def main(n, p, na, n_trios, k, prob, dir):
                         father = rng.binomial(1, pf, size= nf_na)+shift[i]
                         x[rj+2, id_na_f] = father.reshape(nf_na,1)
         
-        z = zarr.create_array(store=f'{dir}/genotype_imputed.zarr', shape=x.T.shape, chunks=(n, 1000), dtype='int8')
-        z[:] = x.T                
-        #z = zarr.array(x.T, chunks=(None,1000)) ##zarr2
+        if zarr.__version__.startswith('3'):
+            logger.info(f"zarr 3")
+            z = zarr.create_array(store=f'{dir}/genotype_imputed.zarr', shape=x.T.shape, chunks=(n, 1000), dtype='int8')
+            z[:] = x.T
+        elif zarr.__version__.startswith('2'):
+            logger.info(f"zarr 2")               
+            z = zarr.array(x.T, chunks=(None,1000)) ##zarr2
+            zarr.save('genotype_imputed.zarr', z) ##zarr2
         logger.info(f"{z.info=}")
-        #zarr.save('genotype_imputed.zarr', z) ##zarr2
-
 
 ##########################
 if __name__ == "__main__":
