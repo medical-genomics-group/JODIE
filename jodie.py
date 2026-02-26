@@ -466,7 +466,7 @@ def main(n, p, k, groups, gindex, iters, burnin, xfiles, xtxfiles, yfile, itc, r
             trace_sigma2[it] = sigma2
             trace_Z[it] = Z_sum
             if (it%500==0) and (it > 0) and (it < burnin):
-                dfm = pd.DataFrame(beta[:p], columns=['child', 'mother', 'father', 'poo'])
+                dfm = pd.DataFrame(beta[:p]) #, columns=['child', 'mother', 'father', 'poo'])
                 dfm.to_csv(resultdir+'/beta_'+str(it)+'.csv.zip', index=False, compression='zip', sep=',')
                 np.savetxt(resultdir+'/V_'+str(it)+'.txt', V.reshape(G*k,k))
                 np.savetxt(resultdir+'/sigma2_'+str(it)+'.txt', sigma2.reshape(1,1))
@@ -485,7 +485,7 @@ def main(n, p, k, groups, gindex, iters, burnin, xfiles, xtxfiles, yfile, itc, r
                 w_V.add(V.reshape(G*k,k))
                 w_tracker.add(tracker[:p])
                 if (it == burnin):
-                    dfm = pd.DataFrame(beta[:p], columns=['child', 'mother', 'father', 'poo'])
+                    dfm = pd.DataFrame(beta[:p]) #, columns=['child', 'mother', 'father', 'poo'])
                     dfm.to_csv(resultdir+'/beta_'+str(it)+'.csv.zip', index=False, compression='zip', sep=',')
                     np.savetxt(resultdir+'/V_'+str(it)+'.txt', V.reshape(G*k,k))
                     np.savetxt(resultdir+'/sigma2_'+str(it)+'.txt', sigma2.reshape(1,1))
@@ -514,9 +514,9 @@ def main(n, p, k, groups, gindex, iters, burnin, xfiles, xtxfiles, yfile, itc, r
                 logger.info(f"{np.matmul(mean_beta.T, mean_beta)=}\n")
                 logger.info(f"{mean_sigma2=}")
                 ### save
-                dfm = pd.DataFrame(mean_beta, columns=['child', 'mother', 'father', 'poo'])
+                dfm = pd.DataFrame(mean_beta) #, columns=['child', 'mother', 'father', 'poo'])
                 dfm.to_csv(resultdir+'/mean_beta_'+str(it)+'.csv.zip', index=False, compression='zip', sep=',')
-                dfv = pd.DataFrame(var_beta, columns=['child', 'mother', 'father', 'poo'])
+                dfv = pd.DataFrame(var_beta) #, columns=['child', 'mother', 'father', 'poo'])
                 dfv.to_csv(resultdir+'/var_beta_'+str(it)+'.csv.zip', index=False, compression='zip', sep=',')
                 np.savetxt(resultdir+'/mean_V_'+str(it)+'.txt', mean_V)
                 np.savetxt(resultdir+'/var_V_'+str(it)+'.txt', var_V)
@@ -546,9 +546,9 @@ def main(n, p, k, groups, gindex, iters, burnin, xfiles, xtxfiles, yfile, itc, r
         logger.info(f"{np.matmul(mean_beta.T, mean_beta)=}\n")
         logger.info(f"{mean_sigma2=}")
         ### save
-        dfm = pd.DataFrame(mean_beta, columns=['child', 'mother', 'father', 'poo'])
+        dfm = pd.DataFrame(mean_beta)#, columns=['child', 'mother', 'father', 'poo'])
         dfm.to_csv(resultdir+'/mean_beta.csv.zip', index=False, compression='zip', sep=',')
-        dfv = pd.DataFrame(var_beta, columns=['child', 'mother', 'father', 'poo'])
+        dfv = pd.DataFrame(var_beta)#, columns=['child', 'mother', 'father', 'poo'])
         dfv.to_csv(resultdir+'/var_beta.csv.zip', index=False, compression='zip', sep=',')
         np.savetxt(resultdir+'/mean_V.txt', mean_V)
         np.savetxt(resultdir+'/var_V.txt', var_V)
