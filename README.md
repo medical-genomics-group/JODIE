@@ -27,7 +27,7 @@ module load openmpi/4.1.8
 python -m venv *nameofyourenv*
 source *nameofyourenv*/bin/activate
 pip install -U pip
-pip install numpy scipy matplotlib loguru mpi4py welford zarr dask pandas tqdm scikit-allel
+pip install numpy scipy matplotlib loguru mpi4py welford zarr dask pandas tqdm scikit-allel numba
 deactivate
 ```
 Typcial installation times are less than a minute.

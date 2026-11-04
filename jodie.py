@@ -52,7 +52,6 @@ from mpi4py import MPI
 import numpy as np
 import scipy.stats as stats
 import scipy.linalg as linalg
-import scipy.linalg.blas as blas
 import matplotlib.pyplot as plt
 import welford
 from loguru import logger
@@ -114,6 +113,38 @@ def sample_mvn(xe, xtx, beta, sigma2, V_inv, pi_ratio, u, z):
             s -= L[m, i]*beta_new[m]
         beta_new[i] = s/L[i, i]
     return 1, beta_new
+
+
+@njit(cache=True, fastmath=True)
+def update_marker(X_split, j, mean, std, epsilon, xtx, beta, sigma2, V_inv, pi_ratio, u, z, diff):
+    """Sample beta for marker j and add X_j (beta - beta_new) to diff in place.
+
+    X_j (columns j*k:(j+1)*k of X_split) is standardized on the fly; missing values (9)
+    are set to the mean, i.e. 0 after standardizing. X_split should be column-major.
+    The inner loops are branch-free and use fastmath so that they vectorize.
+    """
+    n = X_split.shape[0]
+    k = beta.shape[0]
+    c0 = j*k
+    # xe = X_j^T epsilon
+    xe = np.empty(k)
+    for c in range(k):
+        m = mean[c0+c]
+        acc = 0.0
+        for i in range(n):
+            x = X_split[i, c0+c]
+            acc += ((x - m)*(x != 9))*epsilon[i]
+        xe[c] = acc/std[c0+c]
+    tracker, beta_new = sample_mvn(xe, xtx, beta, sigma2, V_inv, pi_ratio, u, z)
+    # diff += X_j (beta - beta_new), skipped for unchanged columns (e.g. excluded markers)
+    for c in range(k):
+        d = (beta[c] - beta_new[c])/std[c0+c]
+        if d != 0.0:
+            m = mean[c0+c]
+            for i in range(n):
+                x = X_split[i, c0+c]
+                diff[i] += ((x - m)*(x != 9))*d
+    return tracker, beta_new
 
 
 def sample_V(beta, L, D, k, Z, a, b, s):
@@ -411,6 +442,10 @@ def main(n, p, k, groups, gindex, iters, burnin, xfiles, xtxfiles, yfile, itc, r
         # random numbers for sample_mvn, drawn in bulk
         u_mvn = rng.uniform(0, 1, p_split)
         z_mvn = rng.standard_normal((p_split, k))
+        # constant within the marker loop
+        sigma2_f = np.asarray(sigma2).item()
+        ### condition if Z = 0
+        V_inv_Z = V_inv * np.where(Z_sum == 0, 1, Z_sum)[:, None, None]
         for j in rj:
             # check if marker is outside of range
             gj = j + p_split*rank
@@ -420,36 +455,17 @@ def main(n, p, k, groups, gindex, iters, burnin, xfiles, xtxfiles, yfile, itc, r
             else:     
                 #get group index
                 g = group_idx[gj]
-                # replace 9 with mean
-                # standardize X; missing values (9) are set to the mean, i.e. 0 after standardizing
-                Xraw = X_split[:, j*k:k*(j+1)]
-                X = (Xraw - mean[j*k:k*(j+1)])/std[j*k:k*(j+1)]
-                X[Xraw == 9] = 0.0
-                #X = np.where(np.equal(X,9), np.nan , X)
-                #X = np.nan_to_num(X,0)
-                #X = (X_split[:, j*k:k*(j+1)] - np.nanmean(X_split[:, j*k:k*(j+1)], axis=0))/np.nanstd(X_split[:, j*k:k*(j+1)], ddof=1, axis=0)
-                #X = np.where(np.isnan(X), np.nanmean(X_split[:, j*k:k*(j+1)]), X)
-                # calculate X.T@epsilon
-                #xe = np.matmul(X.T, epsilon)
-                xe = blas.dgemv(1.0, X, epsilon, trans=1)
-                prev_beta = beta_split[j].copy()
-
-                ## sample beta
-                ### condition if Z = 0
-                temp = V_inv[g] if Z_sum[g]==0 else V_inv[g]*Z_sum[g]
-                tracker_split[j], beta_split[j] = sample_mvn(
-                    xe, 
+                ## sample beta and update diff
+                tracker_split[j], beta_split[j] = update_marker(
+                    X_split, j, mean, std, epsilon,
                     XtX[j*k:(j+1)*k,:],
-                    prev_beta, 
-                    np.asarray(sigma2).item(), 
-                    temp, #V_inv[g]*Z_sum[g], 
+                    beta_split[j],
+                    sigma2_f,
+                    V_inv_Z[g],
                     pi_ratio[g],
                     u_mvn[j],
-                    z_mvn[j])
-
-                # calculate difference in epsilon
-                #diff += np.matmul(X, (prev_beta - beta_split[j]))
-                diff += blas.dgemv(1, X, (prev_beta - beta_split[j]))
+                    z_mvn[j],
+                    diff)
                 # udpate number of non-zero betas
                 Z[g] += tracker_split[j]
                 counter += 1
