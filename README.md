@@ -27,7 +27,7 @@ module load openmpi/4.1.8
 python -m venv *nameofyourenv*
 source *nameofyourenv*/bin/activate
 pip install -U pip
-pip install numpy scipy matplotlib loguru mpi4py welford zarr dask pandas tqdm scikit-allel
+pip install numpy scipy matplotlib loguru mpi4py welford zarr dask pandas tqdm scikit-allel numba
 deactivate
 ```
 Typcial installation times are less than a minute.
@@ -148,6 +148,7 @@ An example data set simulated according to the section Simulations is provided i
 All data preparation steps have been ran for the simulated data so that JODIE can be tested immediately using the following command.
 
    ```
+   mkdir -p MC/results
    python jodie.py --n 10000 --p 20000 --k 4 --g 20000 --iters 500 --burnin 100 --x MC/input/genotype.zarr/ --y MC/true/V5/phenotype.txt --resultdir MC/results/ --xtx MC/input/XtX_pheno.zarr/ --sfile MC/input/std.zarr --mfile MC/input/mean.zarr --rmrsid MC/input/rmrsid.txt
    ```
    

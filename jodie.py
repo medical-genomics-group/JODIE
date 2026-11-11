@@ -3,7 +3,7 @@
 
 Install dependencies:
 ```
-pip install numpy loguru scipy tqdm mpi4py welford matplotlib zarr dask pandas
+pip install numpy loguru scipy tqdm mpi4py welford matplotlib zarr dask pandas numba
 ```
 execute with mpi with n processes:
 mpiexec -n 4 python -m mpi4py jodie_nan.py 
@@ -45,58 +45,106 @@ os.environ["MKL_NUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
 
 import sys
+import time
 import argparse
+import cProfile
 from mpi4py import MPI
 import numpy as np
 import scipy.stats as stats
 import scipy.linalg as linalg
-import scipy.linalg.blas as blas
 import matplotlib.pyplot as plt
 import welford
 from loguru import logger
+import tqdm
 from tqdm import trange
 import zarr
 import dask.array as da
 import pandas as pd
+from numba import njit
 
 
-def sample_mvn(k, xe, xtx, beta, sigma2, V_inv, pi_ratio, rng):
+@njit(cache=True)
+def sample_mvn(xe, xtx, beta, sigma2, V_inv, pi_ratio, u, z):
+    """Sample beta for one marker from its conditional posterior.
 
-    ## sample betas from multivariate normal distribution
-    # calculate omega*
-    omega_star_inv = xtx/sigma2 + V_inv
-    omega_star = linalg.inv(omega_star_inv)
-    # calculate mu*: check order of multiplication
-    mu_star = np.matmul(omega_star, (xe + np.matmul(xtx, beta))) / sigma2
-    # calculate exclusion probability
-    # calc term in exponential (cut of at 100 so that exp does not overflow)
-    f = np.minimum(
-        np.linalg.multi_dot([mu_star.T, omega_star_inv, mu_star])/2, 
-        100)
+    Uses one Cholesky factorisation L L^T = omega*^-1 for mu*, the exclusion
+    probability and the draw. u ~ U(0,1) and z ~ N(0,I_k) are drawn by the caller.
+    """
+    k = xe.shape[0]
+    # omega*^-1 = xtx/sigma2 + V_inv = L L^T
+    A = np.empty((k, k))
+    for i in range(k):
+        for j in range(k):
+            A[i, j] = xtx[i, j]/sigma2 + V_inv[i, j]
+    L = np.zeros((k, k))
+    for i in range(k):
+        for j in range(i+1):
+            s = A[i, j]
+            for m in range(j):
+                s -= L[i, m]*L[j, m]
+            if i == j:
+                L[i, i] = np.sqrt(s)
+            else:
+                L[i, j] = s/L[j, j]
+    # y = L^-1 (xe + xtx beta)/sigma2, so that mu* = L^-T y
+    y = np.empty(k)
+    for i in range(k):
+        s = xe[i]
+        for m in range(k):
+            s += xtx[i, m]*beta[m]
+        s /= sigma2
+        for m in range(i):
+            s -= L[i, m]*y[m]
+        y[i] = s/L[i, i]
+    # mu*^T omega*^-1 mu* = y^T y (cut off at 100 so that exp does not overflow)
+    f = min(np.dot(y, y)/2, 100.0)
+    # det(omega*)^(1/2) = 1/prod(diag(L))
+    detL = 1.0
+    for i in range(k):
+        detL *= L[i, i]
+    tau = pi_ratio/(pi_ratio + np.sqrt(np.linalg.det(V_inv))/detL*np.exp(f))
+    beta_new = np.zeros(k)
+    if tau > u:
+        return 0, beta_new
+    # beta = mu* + L^-T z = L^-T (y + z), which has covariance omega*
+    for i in range(k-1, -1, -1):
+        s = y[i] + z[i]
+        for m in range(i+1, k):
+            s -= L[m, i]*beta_new[m]
+        beta_new[i] = s/L[i, i]
+    return 1, beta_new
 
-    tau = calc_tau(f, pi_ratio, omega_star, V_inv)
-    if tau > rng.uniform(0,1):
-        tracker = 0
-        beta = np.zeros((1,k))
-    else:
-        tracker = 1
-        beta = rng.multivariate_normal(
-            mu_star,
-            omega_star,
-            method="cholesky", 
-            check_valid="ignore"
-        )
 
-    return tracker, beta
+@njit(cache=True, fastmath=True)
+def update_marker(X_split, j, mean, std, epsilon, xtx, beta, sigma2, V_inv, pi_ratio, u, z, diff):
+    """Sample beta for marker j and add X_j (beta - beta_new) to diff in place.
 
-
-def calc_tau(f, pi_ratio, omega_star, V_inv):
-    return (pi_ratio / (
-        pi_ratio
-        + np.linalg.det(V_inv)**(1/2)
-        * np.linalg.det(omega_star)**(1/2)
-        * np.exp(f) )
-    )
+    X_j (columns j*k:(j+1)*k of X_split) is standardized on the fly; missing values (9)
+    are set to the mean, i.e. 0 after standardizing. X_split should be column-major.
+    The inner loops are branch-free and use fastmath so that they vectorize.
+    """
+    n = X_split.shape[0]
+    k = beta.shape[0]
+    c0 = j*k
+    # xe = X_j^T epsilon
+    xe = np.empty(k)
+    for c in range(k):
+        m = mean[c0+c]
+        acc = 0.0
+        for i in range(n):
+            x = X_split[i, c0+c]
+            acc += ((x - m)*(x != 9))*epsilon[i]
+        xe[c] = acc/std[c0+c]
+    tracker, beta_new = sample_mvn(xe, xtx, beta, sigma2, V_inv, pi_ratio, u, z)
+    # diff += X_j (beta - beta_new), skipped for unchanged columns (e.g. excluded markers)
+    for c in range(k):
+        d = (beta[c] - beta_new[c])/std[c0+c]
+        if d != 0.0:
+            m = mean[c0+c]
+            for i in range(n):
+                x = X_split[i, c0+c]
+                diff[i] += ((x - m)*(x != 9))*d
+    return tracker, beta_new
 
 
 def sample_V(beta, L, D, k, Z, a, b, s):
@@ -142,8 +190,16 @@ def sample_invGamma(a, b, a1, b1):
     return stats.invgamma.rvs(a + a1, scale=(b + b1))
 
 
-def main(n, p, k, groups, gindex, iters, burnin, xfiles, xtxfiles, yfile, itc, resultdir, rmid, rmrsid, restart, mfile, sfile):
+def lap(label, t0, rank):
+    # log wall time since t0 and return a new start time
+    t1 = time.perf_counter()
+    logger.info(f"[timing] rank {rank}: {label} took {t1 - t0:.1f} s")
+    return t1
 
+
+def main(n, p, k, groups, gindex, iters, burnin, xfiles, xtxfiles, yfile, itc, resultdir, rmid, rmrsid, restart, mfile, sfile, profile=False):
+
+    t0 = time.perf_counter()
     ## groups
     if gindex:
         group_idx = np.loadtxt(gindex, dtype='int8')
@@ -234,8 +290,11 @@ def main(n, p, k, groups, gindex, iters, burnin, xfiles, xtxfiles, yfile, itc, r
         #    logger.info(f"{group_idx.shape=}")
         #    logger.info(f"{G=}, {group_idx=}")
   
+    t0 = lap("opening data lazily", t0, rank)
     ## split data for each process
-    X_split = xdata[:,rank*k*p_split:(rank+1)*k*p_split].compute()
+    # column-major so each marker's k columns are contiguous in memory
+    X_split = np.asfortranarray(xdata[:,rank*k*p_split:(rank+1)*k*p_split].compute())
+    t0 = lap("loading X_split", t0, rank)
     ## open xtx files
     ## split XtX for each process
     for i in range(len(xtxfiles)):
@@ -247,9 +306,11 @@ def main(n, p, k, groups, gindex, iters, burnin, xfiles, xtxfiles, yfile, itc, r
     #logger.info(f"{xtxdata=}")
     xtxdata = xtxdata.astype('float32')
     XtX = xtxdata[rank*k*p_split:(rank+1)*k*p_split].compute()
+    t0 = lap("loading XtX", t0, rank)
     ## split mean and std for each process
     mean = mean[rank*k*p_split:(rank+1)*k*p_split].compute()
     std = std[rank*k*p_split:(rank+1)*k*p_split].compute()
+    t0 = lap("loading mean and std", t0, rank)
     #logger.info(f"{np.unique(std)}")
 
     if rank==0:
@@ -331,10 +392,16 @@ def main(n, p, k, groups, gindex, iters, burnin, xfiles, xtxfiles, yfile, itc, r
     beta_split = np.zeros(p_split*k)
     comm.Scatterv([beta, p_split*k, MPI.DOUBLE], beta_split, root=0)
     beta_split = beta_split.reshape(p_split, k)
+    t0 = lap("initialisation", t0, rank)
 
     ## start iterations
     if rank==0:
         logger.info(f"Running Gibbs with {iters=} and {burnin=}")
+    if profile:
+        # profile only the main loop; tqdm's monitor thread would corrupt cProfile's call stack
+        tqdm.tqdm.monitor_interval = 0
+        prof = cProfile.Profile()
+        prof.enable()
     for it in trange(iters, desc="Main loop"):
 
         comm.Barrier()
@@ -372,6 +439,13 @@ def main(n, p, k, groups, gindex, iters, burnin, xfiles, xtxfiles, yfile, itc, r
         # loop trough all markers randomly
         rj = np.arange(0, p_split)
         rng.shuffle(rj)
+        # random numbers for sample_mvn, drawn in bulk
+        u_mvn = rng.uniform(0, 1, p_split)
+        z_mvn = rng.standard_normal((p_split, k))
+        # constant within the marker loop
+        sigma2_f = np.asarray(sigma2).item()
+        ### condition if Z = 0
+        V_inv_Z = V_inv * np.where(Z_sum == 0, 1, Z_sum)[:, None, None]
         for j in rj:
             # check if marker is outside of range
             gj = j + p_split*rank
@@ -381,36 +455,17 @@ def main(n, p, k, groups, gindex, iters, burnin, xfiles, xtxfiles, yfile, itc, r
             else:     
                 #get group index
                 g = group_idx[gj]
-                # replace 9 with mean
-                X = X_split[:, j*k:k*(j+1)]
-                X = np.where(np.equal(X,9), mean[j*k:k*(j+1)], X)
-                #X = np.where(np.equal(X,9), np.nan , X)
-                #X = np.nan_to_num(X,0)
-                # standardize X
-                X = (X - mean[j*k:k*(j+1)])/std[j*k:k*(j+1)]
-                #X = (X_split[:, j*k:k*(j+1)] - np.nanmean(X_split[:, j*k:k*(j+1)], axis=0))/np.nanstd(X_split[:, j*k:k*(j+1)], ddof=1, axis=0)
-                #X = np.where(np.isnan(X), np.nanmean(X_split[:, j*k:k*(j+1)]), X)
-                # calculate X.T@epsilon
-                #xe = np.matmul(X.T, epsilon)
-                xe = blas.dgemv(1.0, X, epsilon, trans=1)
-                prev_beta = beta_split[j].copy()
-
-                ## sample beta
-                ### condition if Z = 0
-                temp = V_inv[g] if Z_sum[g]==0 else V_inv[g]*Z_sum[g]
-                tracker_split[j], beta_split[j] = sample_mvn(
-                    k, 
-                    xe, 
+                ## sample beta and update diff
+                tracker_split[j], beta_split[j] = update_marker(
+                    X_split, j, mean, std, epsilon,
                     XtX[j*k:(j+1)*k,:],
-                    prev_beta, 
-                    sigma2, 
-                    temp, #V_inv[g]*Z_sum[g], 
+                    beta_split[j],
+                    sigma2_f,
+                    V_inv_Z[g],
                     pi_ratio[g],
-                    rng)
-
-                # calculate difference in epsilon
-                #diff += np.matmul(X, (prev_beta - beta_split[j]))
-                diff += blas.dgemv(1, X, (prev_beta - beta_split[j]))
+                    u_mvn[j],
+                    z_mvn[j],
+                    diff)
                 # udpate number of non-zero betas
                 Z[g] += tracker_split[j]
                 counter += 1
@@ -529,6 +584,11 @@ def main(n, p, k, groups, gindex, iters, burnin, xfiles, xtxfiles, yfile, itc, r
                 for g in range(G):
                     np.savetxt(resultdir+'/trace_V'+str(g)+'_'+str(it)+'.txt', trace_V[:, g].diagonal(0,1,2))
 
+    if profile:
+        prof.disable()
+        prof.dump_stats(resultdir+'/loop_rank'+str(rank)+'.prof')
+    t0 = lap("main loop", t0, rank)
+
     ## iterations finished
     ## print out numbers
     if rank == 0:
@@ -562,6 +622,7 @@ def main(n, p, k, groups, gindex, iters, burnin, xfiles, xtxfiles, yfile, itc, r
             np.savetxt(resultdir+'/trace_V.txt', trace_V.reshape(iters,k*k))
         else:
             np.savetxt(resultdir+'/trace_V.txt', trace_V[:, g].diagonal(0,1,2))
+        t0 = lap("saving results", t0, rank)
 
         # Plotting sigma2 results
         logger.info("Plotting sigma2 results.")
@@ -592,6 +653,7 @@ def main(n, p, k, groups, gindex, iters, burnin, xfiles, xtxfiles, yfile, itc, r
         axZ.set(ylabel='Z', xlabel='iterations')
         axZ.get_figure().savefig(resultdir+'/trace_Z.png')
         plt.close()
+        t0 = lap("plotting", t0, rank)
 
 ##########################
 if __name__ == "__main__":
@@ -613,6 +675,7 @@ if __name__ == "__main__":
     parser.add_argument('--rmid', type=str, help='list of ids to delete (default is None)')
     parser.add_argument('--rmrsid', type=str, help='list of rsids to delete (default is None)')
     parser.add_argument('--restart', type=bool, default=False, help='restart with burnin values (default=False)')
+    parser.add_argument('--profile', action='store_true', help='profile the main loop with cProfile, written to resultdir/loop_rank<rank>.prof')
     args = parser.parse_args()
     logger.info(args)
 
@@ -642,5 +705,6 @@ if __name__ == "__main__":
         restart = args.restart, #boolean for restart
         mfile = args.mfile,
         sfile = args.sfile,
+        profile = args.profile,
         ) 
     logger.info("Done.")
